@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-const port = Number(process.env.PW_PORT || 5174);
+const port = Number(process.env.PW_PORT || 5199);
 
 export default defineConfig({
   testDir: './tests',
@@ -26,8 +26,8 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `npm run dev -- --host 127.0.0.1 --port ${port}`,
+    command: `npx vite --host 127.0.0.1 --port ${port} --strictPort`,
     url: `http://127.0.0.1:${port}`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
   },
 });
