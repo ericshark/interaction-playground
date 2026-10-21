@@ -32,19 +32,19 @@ test('sound lab selects a pack, remembers it, and collapses', async ({
   });
   await page.reload();
   const lab = page.getByRole('complementary', { name: 'Sound lab' });
-  const trackpad = lab.getByRole('button', { name: 'Trackpad', exact: true });
+  const snap = lab.getByRole('button', { name: 'Snap', exact: true });
   await expect(
-    lab.getByRole('button', { name: 'Blip', exact: true }),
+    lab.getByRole('button', { name: 'Crisp click', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
-  await trackpad.click();
-  await expect(trackpad).toHaveAttribute('aria-pressed', 'true');
-  await expect(lab).toContainText('Force Touch');
+  await snap.click();
+  await expect(snap).toHaveAttribute('aria-pressed', 'true');
+  await expect(lab).toContainText('small latch');
   await lab.getByRole('button', { name: 'Success' }).click();
   await page.reload();
-  await expect(trackpad).toHaveAttribute('aria-pressed', 'true');
+  await expect(snap).toHaveAttribute('aria-pressed', 'true');
   await lab.getByRole('button', { name: /Sound lab/ }).click();
-  await expect(trackpad).toHaveCount(0);
-  await expect(lab).toContainText('Trackpad');
+  await expect(snap).toHaveCount(0);
+  await expect(lab).toContainText('Snap');
 });
 
 test('all 19 demos render with local assets and no page errors or horizontal overflow', async ({

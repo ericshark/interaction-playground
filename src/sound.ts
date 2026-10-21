@@ -106,12 +106,13 @@ function hiss(
 }
 
 // Each pack is built from one "voice" played at different strengths and
-// pitches, so every interaction in a pack shares the same character.
+// pitches, so every interaction in a pack shares the same character. Packs
+// without a release voice use a lighter, higher copy of the press.
 type Voice = (strength: number, pitch: number, delay: number) => void;
 export type SoundPack = {
   id: string;
   name: string;
-  group: 'Trackpad-like' | 'Current' | 'Experimental';
+  group: 'Reference' | 'Variations';
   description: string;
   voice: Voice;
   release?: Voice;
@@ -119,37 +120,10 @@ export type SoundPack = {
 
 export const soundPacks: SoundPack[] = [
   {
-    id: 'trackpad',
-    name: 'Trackpad',
-    group: 'Trackpad-like',
-    description: 'A short low thump with a dry tick, like a Force Touch click.',
-    voice: (s, p, d) => {
-      tone(190 * p, d, 0.016, 0.55 * s, { end: 150 * p });
-      hiss(d, 0.006, 0.22 * s, 'bandpass', 2600 * p, { q: 1.2 });
-    },
-    release: (s, p, d) => {
-      tone(240 * p, d, 0.011, 0.3 * s, { end: 200 * p });
-      hiss(d, 0.004, 0.12 * s, 'bandpass', 3400 * p, { q: 1.2 });
-    },
-  },
-  {
-    id: 'trackpad-soft',
-    name: 'Soft press',
-    group: 'Trackpad-like',
-    description: 'A rounder, muffled click with almost no edge.',
-    voice: (s, p, d) => {
-      tone(140 * p, d, 0.024, 0.55 * s, { end: 110 * p, attack: 0.003 });
-      hiss(d, 0.009, 0.1 * s, 'lowpass', 1800 * p);
-    },
-    release: (s, p, d) => {
-      tone(175 * p, d, 0.016, 0.25 * s, { end: 150 * p, attack: 0.003 });
-    },
-  },
-  {
-    id: 'trackpad-crisp',
+    id: 'crisp',
     name: 'Crisp click',
-    group: 'Trackpad-like',
-    description: 'A tight, bright click with a tiny body underneath.',
+    group: 'Reference',
+    description: 'The one you liked: a bright tick over a tiny low body.',
     voice: (s, p, d) => {
       tone(230 * p, d, 0.01, 0.42 * s, { end: 190 * p });
       hiss(d, 0.004, 0.3 * s, 'highpass', 4800 * p);
@@ -161,95 +135,96 @@ export const soundPacks: SoundPack[] = [
     },
   },
   {
-    id: 'thock',
-    name: 'Thock',
-    group: 'Trackpad-like',
-    description: 'A deep keyboard-style thock with a woody resonance.',
+    id: 'micro',
+    name: 'Micro',
+    group: 'Variations',
+    description:
+      'Shorter and quieter: a tiny, precise tick with barely any body.',
     voice: (s, p, d) => {
-      tone(115 * p, d, 0.032, 0.6 * s, { end: 80 * p });
-      hiss(d, 0.018, 0.16 * s, 'bandpass', 1200 * p, { q: 2 });
-    },
-    release: (s, p, d) => {
-      hiss(d, 0.008, 0.1 * s, 'bandpass', 1800 * p, { q: 2 });
+      hiss(d, 0.0025, 0.26 * s, 'highpass', 6200 * p);
+      tone(280 * p, d, 0.006, 0.2 * s, { end: 240 * p });
     },
   },
   {
-    id: 'blip',
-    name: 'Blip',
-    group: 'Current',
-    description: 'The current set: short, high, soft sine blips.',
-    voice: (s, p, d) =>
-      tone(4200 * p, d, 0.012 + 0.016 * s, 0.045 * s, { end: 3600 * p }),
-  },
-  {
-    id: 'glass',
-    name: 'Glass',
-    group: 'Experimental',
-    description: 'A tiny struck-glass chime with an inharmonic shimmer.',
+    id: 'snap',
+    name: 'Snap',
+    group: 'Variations',
+    description: 'All edge, no thump: a dry snap like a small latch.',
     voice: (s, p, d) => {
-      tone(2100 * p, d, 0.06 + 0.12 * s, 0.05 * s);
-      tone(5300 * p, d, 0.04 + 0.08 * s, 0.022 * s);
+      hiss(d, 0.003, 0.34 * s, 'bandpass', 3200 * p, { q: 4 });
+      hiss(d, 0.002, 0.22 * s, 'highpass', 7200 * p);
     },
   },
   {
-    id: 'wood',
-    name: 'Woodblock',
-    group: 'Experimental',
-    description: 'A hollow wooden knock.',
+    id: 'pebble',
+    name: 'Pebble',
+    group: 'Variations',
+    description: 'A little rounder and lower, like two smooth stones touching.',
     voice: (s, p, d) => {
-      tone(780 * p, d, 0.05, 0.28 * s, { end: 700 * p });
-      hiss(d, 0.025, 0.14 * s, 'bandpass', 1600 * p, { q: 6 });
+      tone(180 * p, d, 0.013, 0.45 * s, { end: 150 * p });
+      hiss(d, 0.004, 0.24 * s, 'bandpass', 3600 * p, { q: 2 });
     },
   },
   {
-    id: 'bubble',
-    name: 'Bubble',
-    group: 'Experimental',
-    description: 'A playful rising pop, like a bubble surfacing.',
-    voice: (s, p, d) =>
-      tone(380 * p, d, 0.06, 0.16 * s, { end: 1100 * p, attack: 0.004 }),
-  },
-  {
-    id: 'retro',
-    name: '8-bit',
-    group: 'Experimental',
-    description: 'Square-wave bleeps from an old handheld.',
-    voice: (s, p, d) =>
-      tone(880 * p, d, 0.035 + 0.03 * s, 0.05 * s, { type: 'square' }),
-  },
-  {
-    id: 'silk',
-    name: 'Silk',
-    group: 'Experimental',
-    description: 'A breathy puff of air instead of a tone.',
-    voice: (s, p, d) =>
-      hiss(d, 0.03 + 0.03 * s, 0.12 * s, 'bandpass', 6000 * p, {
-        end: 4200 * p,
-        attack: 0.006,
-      }),
-  },
-  {
-    id: 'typewriter',
-    name: 'Typewriter',
-    group: 'Experimental',
-    description: 'A mechanical strike with a short metallic tail.',
+    id: 'tactile',
+    name: 'Tactile',
+    group: 'Variations',
+    description: 'A double-edged click, like a quality mouse switch.',
     voice: (s, p, d) => {
-      hiss(d, 0.01, 0.3 * s, 'highpass', 2500 * p);
-      tone(320 * p, d, 0.02, 0.18 * s);
-      hiss(d + 0.006, 0.04, 0.05 * s, 'bandpass', 900 * p, { q: 3 });
+      hiss(d, 0.0025, 0.3 * s, 'highpass', 5000 * p);
+      hiss(d + 0.007, 0.002, 0.14 * s, 'highpass', 5800 * p);
+      tone(240 * p, d, 0.01, 0.3 * s, { end: 200 * p });
     },
   },
   {
-    id: 'sonar',
-    name: 'Sonar',
-    group: 'Experimental',
-    description: 'A soft ping that rings out, like a submarine sonar.',
-    voice: (s, p, d) =>
-      tone(1050 * p, d, 0.1 + 0.25 * s, 0.05 * s, { attack: 0.004 }),
+    id: 'glint',
+    name: 'Glint',
+    group: 'Variations',
+    description: 'Crisp click with a faint glassy ring trailing behind it.',
+    voice: (s, p, d) => {
+      tone(230 * p, d, 0.009, 0.36 * s, { end: 190 * p });
+      hiss(d, 0.0035, 0.26 * s, 'highpass', 5000 * p);
+      tone(6200 * p, d, 0.03, 0.018 * s);
+    },
+  },
+  {
+    id: 'hollow',
+    name: 'Hollow',
+    group: 'Variations',
+    description:
+      'A crisp tap on a hollow plastic shell, with a short resonance.',
+    voice: (s, p, d) => {
+      hiss(d, 0.003, 0.26 * s, 'highpass', 4600 * p);
+      hiss(d, 0.016, 0.12 * s, 'bandpass', 1800 * p, { q: 9 });
+      tone(210 * p, d, 0.008, 0.22 * s);
+    },
+  },
+  {
+    id: 'haptic',
+    name: 'Haptic',
+    group: 'Variations',
+    description: 'Crisp click over a deep, felt bump, like a phone haptic.',
+    voice: (s, p, d) => {
+      tone(90 * p, d, 0.022, 0.6 * s, { end: 70 * p, attack: 0.003 });
+      hiss(d, 0.003, 0.26 * s, 'highpass', 5200 * p);
+    },
+  },
+  {
+    id: 'organic',
+    name: 'Organic',
+    group: 'Variations',
+    description:
+      'Crisp click with tiny random pitch and level changes each time, so repeats never sound identical.',
+    voice: (s, p, d) => {
+      const jitter = 1 + (Math.random() - 0.5) * 0.12;
+      const level = s * (0.9 + Math.random() * 0.2);
+      tone(230 * p * jitter, d, 0.01, 0.4 * level, { end: 190 * p * jitter });
+      hiss(d, 0.004, 0.3 * level, 'highpass', 4800 * p * jitter);
+    },
   },
 ];
 
-const defaultPack = soundPacks.find((item) => item.id === 'blip')!;
+const defaultPack = soundPacks[0];
 function readPack() {
   try {
     const id = localStorage.getItem('playground:sound-pack');
@@ -280,7 +255,8 @@ function render(kind: SoundKind, pitch: number, selected: SoundPack) {
       voice(1, pitch, 0);
       break;
     case 'release':
-      release?.(0.7, pitch, 0);
+      if (release) release(0.7, pitch, 0);
+      else voice(0.4, 1.2 * pitch, 0);
       break;
     case 'tick':
       voice(0.55, 1.15 * pitch, 0);

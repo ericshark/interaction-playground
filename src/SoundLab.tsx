@@ -14,13 +14,14 @@ import {
 const previews: [string, SoundKind][] = [
   ['Hover', 'hover'],
   ['Click', 'tap'],
+  ['Release', 'release'],
   ['Toggle', 'toggle'],
   ['Pop', 'pop'],
   ['Success', 'success'],
   ['Delete', 'delete'],
   ['Whoosh', 'whoosh'],
 ];
-const groups = ['Trackpad-like', 'Current', 'Experimental'] as const;
+const groups = ['Reference', 'Variations'] as const;
 
 function readLabState() {
   try {
@@ -93,11 +94,10 @@ export function SoundLab() {
                           setSoundPack(pack.id);
                           setSelected(pack.id);
                           previewSound('tap', pack.id);
-                          if (pack.release)
-                            window.setTimeout(
-                              () => previewSound('release', pack.id),
-                              110,
-                            );
+                          window.setTimeout(
+                            () => previewSound('release', pack.id),
+                            110,
+                          );
                         }}
                       >
                         {pack.name}
