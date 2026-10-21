@@ -122,11 +122,12 @@ export function InfiniteCards() {
     4000,
   );
   const stack = useRef<HTMLDivElement>(null);
-  const step = (amount: number) => {
+  const step = (amount: number) => advance(amount);
+  // Wheel steps have no click of their own, so they get a soft tick.
+  useWheelSteps(stack, (amount) => {
     advance(amount);
-    playSound('tick', amount > 0 ? 1 : 0.85);
-  };
-  useWheelSteps(stack, step);
+    playSound('tick');
+  });
   return (
     <div
       className="infinite-demo"
@@ -411,6 +412,7 @@ export function StackedCards() {
               <motion.button
                 key={i}
                 className="spatial-card"
+                data-hover-sound
                 aria-label={`Show ${stackNames[i]} card`}
                 aria-pressed={selected === i}
                 initial={false}
@@ -534,12 +536,10 @@ export function GalleryCarousel() {
       wrap(index - current + ringPhotos.length / 2, ringPhotos.length) -
       ringPhotos.length / 2;
     settleTo(-(current + offset) * ringStep);
-    playSound('tick');
   };
   const advance = (step: number) => {
     const current = Math.round(-rotation.get() / ringStep);
     settleTo(-(current + step) * ringStep);
-    playSound('tick');
   };
 
   return (
@@ -583,7 +583,6 @@ export function GalleryCarousel() {
           window.setTimeout(() => (suppressClick.current = false), 0);
           const projected = rotation.get() + state.velocity * 0.22;
           settleTo(Math.round(projected / ringStep) * ringStep, state.velocity);
-          playSound('tick');
         }}
         onPointerCancel={() => {
           drag.current = null;

@@ -14,37 +14,7 @@ const pressedIndex = (cards: Locator) =>
   );
 
 test.beforeEach(async ({ page }) => {
-  // The floating sound lab is hidden so it cannot cover demo controls, except
-  // in the test that opts back in.
-  await page.addInitScript(() => {
-    if (!sessionStorage.getItem('show-sound-lab'))
-      localStorage.setItem('playground:sound-lab', 'hidden');
-  });
   await page.goto('/');
-});
-
-test('sound lab selects a pack, remembers it, and collapses', async ({
-  page,
-}) => {
-  await page.evaluate(() => {
-    sessionStorage.setItem('show-sound-lab', 'true');
-    localStorage.removeItem('playground:sound-lab');
-  });
-  await page.reload();
-  const lab = page.getByRole('complementary', { name: 'Sound lab' });
-  const snap = lab.getByRole('button', { name: 'Snap', exact: true });
-  await expect(
-    lab.getByRole('button', { name: 'Crisp click', exact: true }),
-  ).toHaveAttribute('aria-pressed', 'true');
-  await snap.click();
-  await expect(snap).toHaveAttribute('aria-pressed', 'true');
-  await expect(lab).toContainText('small latch');
-  await lab.getByRole('button', { name: 'Success' }).click();
-  await page.reload();
-  await expect(snap).toHaveAttribute('aria-pressed', 'true');
-  await lab.getByRole('button', { name: /Sound lab/ }).click();
-  await expect(snap).toHaveCount(0);
-  await expect(lab).toContainText('Snap');
 });
 
 test('all 19 demos render with local assets and no page errors or horizontal overflow', async ({

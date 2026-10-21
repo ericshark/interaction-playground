@@ -219,6 +219,7 @@ export function Notifications() {
             <motion.button
               key={title}
               className="notification-card"
+              data-hover-sound
               aria-label={`Inspect ${title} notification`}
               aria-pressed={selected === i}
               initial={{ opacity: 0, y: 140, x: 0, rotate: -7 }}
@@ -252,10 +253,7 @@ export function Notifications() {
                   '--depth': depth,
                 } as CSSProperties
               }
-              onClick={() => {
-                if (selected !== i) playSound('pop');
-                setSelected(i);
-              }}
+              onClick={() => setSelected(i)}
             >
               <strong>
                 <span className={`notice-badge ${color}`}>
@@ -378,6 +376,7 @@ export function InfoReveal() {
           <motion.button
             key={stage.name}
             className="reveal-sheet"
+            data-hover-sound
             aria-label={`Stage ${i + 1}: ${stage.name}`}
             aria-pressed={selected === i}
             animate={{ x: depth * 28, y: -depth * 28 }}
@@ -392,10 +391,7 @@ export function InfoReveal() {
               transition: lift,
             }}
             style={{ zIndex: 10 - depth, '--depth': depth } as CSSProperties}
-            onClick={() => {
-              if (selected !== i) playSound('pop');
-              setSelected(i);
-            }}
+            onClick={() => setSelected(i)}
             transition={spring}
           >
             <strong>{stage.name}</strong>
@@ -442,14 +438,9 @@ export function HoldToDelete() {
       return;
     }
     const start = performance.now();
-    let notch = 0;
     const tick = (time: number) => {
       const value = Math.min((time - start) / 1100, 1);
       setProgress(value);
-      if (value >= (notch + 1) / 6 && value < 1) {
-        notch++;
-        playSound('tick', 0.7 + notch * 0.12);
-      }
       if (value === 1) {
         playSound('delete');
         setTracks((current) => current.filter((track) => track.id !== holding));

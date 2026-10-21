@@ -25,7 +25,6 @@ import {
   useActiveInterval,
   useDismiss,
 } from '../core';
-import { playSound } from '../sound';
 
 const artworks = [
   {
@@ -72,10 +71,7 @@ export function SwitchLayout() {
         <Choices
           options={layouts}
           value={layout}
-          onChange={(value) => {
-            setLayout(value);
-            playSound('whoosh');
-          }}
+          onChange={setLayout}
           label="Artwork layout"
           icons={{
             'List view': <List size={13} />,
@@ -100,12 +96,11 @@ export function SwitchLayout() {
                 className={`artwork ${isSaved ? 'selected' : ''}`}
                 aria-label={`Select ${item.name} artwork`}
                 aria-pressed={isSaved}
-                onClick={() => {
-                  playSound(isSaved ? 'tick' : 'toggle');
+                onClick={() =>
                   setSaved(
                     isSaved ? saved.filter((n) => n !== i) : [...saved, i],
-                  );
-                }}
+                  )
+                }
                 animate={
                   view === 'pack-view'
                     ? {
@@ -392,7 +387,6 @@ export function TimeZones() {
           clock.id === picker ? { ...clock, city } : clock,
         ),
       );
-    playSound('pop');
     setPicker(null);
   };
   const editing = items.find((item) => item.id === picker);
@@ -475,12 +469,11 @@ export function TimeZones() {
               count={items.length}
               canRemove={items.length > 1}
               edit={() => setPicker(item.id)}
-              remove={() => {
-                playSound('delete');
+              remove={() =>
                 setItems((current) =>
                   current.filter((clock) => clock.id !== item.id),
-                );
-              }}
+                )
+              }
               move={(direction) => move(item.id, direction)}
               drop={(clientX, clientY) => {
                 const target = document
@@ -504,7 +497,6 @@ export function TimeZones() {
                   [result[from], result[to]] = [result[to], result[from]];
                   return result;
                 });
-                playSound('tick');
               }}
             />
           ))}

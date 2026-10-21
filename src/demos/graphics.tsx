@@ -540,6 +540,7 @@ export function Matrix() {
         role="button"
         tabIndex={0}
         aria-label="Matrix animation"
+        data-sound-skip
         aria-description="Click to glitch. Press Space to pause."
         aria-pressed={paused}
         onPointerMove={(event) => {
@@ -562,12 +563,7 @@ export function Matrix() {
             pending: true,
           };
           setPaused(false);
-          [0, 0.06, 0.13, 0.22].forEach((delay, i) =>
-            window.setTimeout(
-              () => playSound('tick', 1.3 - i * 0.12),
-              delay * 1000,
-            ),
-          );
+          playSound('glitch');
         }}
         onKeyDown={(event) => {
           if (event.key === ' ' || event.key === 'Enter') {

@@ -223,10 +223,7 @@ export function ChatOrb() {
         className={`orb-button ${listening ? 'listening' : ''}`}
         aria-label={listening ? 'Stop listening' : 'Start voice preview'}
         aria-pressed={listening}
-        onClick={() => {
-          playSound(listening ? 'toggle' : 'pop');
-          setListening(!listening);
-        }}
+        onClick={() => setListening(!listening)}
         onPointerEnter={() => (live.current.hovered = true)}
         onPointerLeave={() => (live.current.hovered = false)}
         onFocus={() => (live.current.hovered = true)}
@@ -388,7 +385,6 @@ function LocationSelect({
   const commit = (index: number) => {
     onChange(index);
     setOpen(false);
-    playSound('tick');
   };
   return (
     <div className="location-select" ref={ref}>
@@ -660,17 +656,13 @@ export function ImageSend() {
                         delay:
                           status === 'sending' ? i * 0.05 : 0.06 + i * 0.04,
                       }}
-                      onClick={() => {
-                        playSound(
-                          isSelected ? 'tick' : 'pop',
-                          isSelected ? 0.8 : 1,
-                        );
+                      onClick={() =>
                         setSelected((current) =>
                           current.includes(i + 1)
                             ? current.filter((n) => n !== i + 1)
                             : [...current, i + 1],
-                        );
-                      }}
+                        )
+                      }
                     >
                       <img src={src} alt={name} draggable={false} />
                       <span className="send-check">
@@ -703,10 +695,7 @@ export function ImageSend() {
                     : 'Send images'
                 }
                 disabled={count === 0 || status === 'sending'}
-                onClick={() => {
-                  playSound('whoosh');
-                  setStatus('sending');
-                }}
+                onClick={() => setStatus('sending')}
               >
                 {status === 'sending' ? 'Sending…' : 'Send'}
               </button>
@@ -840,10 +829,7 @@ export function Transactions() {
   const [open, setOpen] = useState(false);
   const [processing, setProcessing] = useState(false);
   useActiveInterval(
-    () => {
-      setQueue((current) => current.slice(1));
-      playSound('tick', 1.2);
-    },
+    () => setQueue((current) => current.slice(1)),
     1800,
     processing && queue.length > 0,
     false,
@@ -1226,9 +1212,7 @@ export function DynamicIsland() {
             }
             aria-expanded={mode === 'Idle' ? undefined : !compact}
             onClick={() => {
-              if (mode === 'Idle') return;
-              playSound('pop', compact ? 1 : 0.85);
-              setCompact(!compact);
+              if (mode !== 'Idle') setCompact(!compact);
             }}
           />
           <AnimatePresence mode="popLayout" initial={false}>
