@@ -15,6 +15,13 @@
     />
   </head>
   <body>
+    <script>
+      // Apply the saved theme before first paint to avoid a light flash.
+      try {
+        if (localStorage.getItem('playground:dark') === 'true')
+          document.documentElement.dataset.theme = 'dark';
+      } catch {}
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

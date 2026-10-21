@@ -8,7 +8,6 @@ const interactive =
 
 let context: AudioContext | null = null;
 let output: GainNode | null = null;
-let noise: AudioBuffer | null = null;
 let enabled = true;
 let lastHover = 0;
 
@@ -27,104 +26,69 @@ function unlockAudio() {
     if (!AudioContextClass) return;
     context = new AudioContextClass();
     output = context.createGain();
-    output.gain.value = 0.55;
+    output.gain.value = 0.35;
     output.connect(context.destination);
-    noise = context.createBuffer(
-      1,
-      context.sampleRate * 0.5,
-      context.sampleRate,
-    );
-    const data = noise.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
   }
   if (context.state === 'suspended') void context.resume();
 }
 
-function envelope(start: number, duration: number, peak: number) {
-  const gain = context!.createGain();
-  gain.gain.setValueAtTime(0, start);
-  gain.gain.linearRampToValueAtTime(peak, start + 0.003);
-  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-  gain.connect(output!);
-  return gain;
-}
-
-function tone(
+// Every sound is a short, high sine blip: a ~2ms attack and an exponential
+// decay keep them soft and click-free.
+function blip(
   frequency: number,
   delay: number,
   duration: number,
   peak: number,
-  type: OscillatorType = 'sine',
   endFrequency = frequency,
 ) {
   const start = context!.currentTime + delay;
   const oscillator = context!.createOscillator();
-  oscillator.type = type;
+  const gain = context!.createGain();
+  oscillator.type = 'sine';
   oscillator.frequency.setValueAtTime(frequency, start);
-  oscillator.frequency.exponentialRampToValueAtTime(
-    endFrequency,
-    start + duration,
-  );
-  oscillator.connect(envelope(start, duration, peak));
+  if (endFrequency !== frequency)
+    oscillator.frequency.exponentialRampToValueAtTime(
+      endFrequency,
+      start + duration,
+    );
+  gain.gain.setValueAtTime(0, start);
+  gain.gain.linearRampToValueAtTime(peak, start + 0.002);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  oscillator.connect(gain);
+  gain.connect(output!);
   oscillator.start(start);
-  oscillator.stop(start + duration + 0.02);
-}
-
-function burst(
-  delay: number,
-  duration: number,
-  peak: number,
-  type: BiquadFilterType,
-  frequency: number,
-  endFrequency = frequency,
-) {
-  const start = context!.currentTime + delay;
-  const source = context!.createBufferSource();
-  source.buffer = noise;
-  const filter = context!.createBiquadFilter();
-  filter.type = type;
-  filter.Q.value = type === 'bandpass' ? 1.4 : 0.7;
-  filter.frequency.setValueAtTime(frequency, start);
-  filter.frequency.exponentialRampToValueAtTime(endFrequency, start + duration);
-  source.connect(filter);
-  filter.connect(envelope(start, duration, peak));
-  source.start(start);
-  source.stop(start + duration + 0.02);
+  oscillator.stop(start + duration + 0.01);
 }
 
 export function playSound(kind: SoundKind, pitch = 1) {
   if (!enabled || !context || context.state !== 'running') return;
   switch (kind) {
     case 'hover':
-      tone(2500 * pitch, 0, 0.028, 0.03);
-      burst(0, 0.012, 0.025, 'highpass', 6500);
+      blip(4800 * pitch, 0, 0.014, 0.018);
       break;
     case 'tap':
-      tone(1500 * pitch, 0, 0.05, 0.05, 'triangle', 950 * pitch);
-      burst(0, 0.016, 0.04, 'bandpass', 3200);
+      blip(3200 * pitch, 0, 0.03, 0.04, 2600 * pitch);
       break;
     case 'tick':
-      tone(1900 * pitch, 0, 0.04, 0.045);
-      burst(0, 0.01, 0.035, 'highpass', 4500);
+      blip(4200 * pitch, 0, 0.018, 0.03);
       break;
     case 'toggle':
-      tone(880 * pitch, 0, 0.06, 0.045);
-      tone(1320 * pitch, 0.045, 0.08, 0.04);
+      blip(2600 * pitch, 0, 0.03, 0.035);
+      blip(3500 * pitch, 0.04, 0.035, 0.03);
       break;
     case 'pop':
-      tone(520 * pitch, 0, 0.09, 0.07, 'sine', 1150 * pitch);
+      blip(2200 * pitch, 0, 0.05, 0.04, 3400 * pitch);
       break;
     case 'whoosh':
-      burst(0, 0.38, 0.07, 'bandpass', 380, 2600);
+      blip(1800, 0, 0.12, 0.025, 3600);
       break;
     case 'success':
-      tone(880, 0, 0.14, 0.055);
-      tone(1318.5, 0.09, 0.26, 0.05);
-      tone(1760, 0.18, 0.32, 0.025);
+      blip(2600, 0, 0.06, 0.03);
+      blip(3300, 0.06, 0.07, 0.026);
+      blip(3900, 0.12, 0.12, 0.022);
       break;
     case 'delete':
-      tone(560, 0, 0.2, 0.06, 'triangle', 170);
-      burst(0, 0.12, 0.04, 'lowpass', 1800, 300);
+      blip(2400, 0, 0.09, 0.035, 1400);
       break;
   }
 }

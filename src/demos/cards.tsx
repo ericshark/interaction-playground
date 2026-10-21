@@ -11,10 +11,11 @@ import {
   GitCommitHorizontal,
   LoaderCircle,
   Music2,
+  RotateCcw,
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { Choices, Replay, spring, useActivity } from '../core';
+import { Choices, IconButton, Replay, spring, useActivity } from '../core';
 import { playSound } from '../sound';
 
 export function Toolbar() {
@@ -368,6 +369,7 @@ const stages = [
 ];
 export function InfoReveal() {
   const [selected, setSelected] = useState(4);
+  const lift = { type: 'spring' as const, stiffness: 400, damping: 28 };
   return (
     <div className="info-reveal">
       {stages.map((stage, i) => {
@@ -378,16 +380,22 @@ export function InfoReveal() {
             className="reveal-sheet"
             aria-label={`Stage ${i + 1}: ${stage.name}`}
             aria-pressed={selected === i}
-            animate={{
-              x: depth * 28,
-              y: -depth * 28,
-              backgroundColor:
-                depth === 0
-                  ? '#e5e5e5'
-                  : `rgb(${246 + depth},${246 + depth},${246 + depth})`,
+            animate={{ x: depth * 28, y: -depth * 28 }}
+            whileHover={{
+              x: depth * 28 + 6,
+              y: -depth * 28 - 14,
+              transition: lift,
             }}
-            style={{ zIndex: 10 - depth }}
-            onClick={() => setSelected(i)}
+            whileFocus={{
+              x: depth * 28 + 6,
+              y: -depth * 28 - 14,
+              transition: lift,
+            }}
+            style={{ zIndex: 10 - depth, '--depth': depth } as CSSProperties}
+            onClick={() => {
+              if (selected !== i) playSound('pop');
+              setSelected(i);
+            }}
             transition={spring}
           >
             <strong>{stage.name}</strong>
@@ -528,18 +536,19 @@ export function HoldToDelete() {
           </div>
         )}
       </div>
+      <IconButton
+        label="Reset playlist"
+        className="replay"
+        onClick={() => {
+          cancel();
+          setTracks(songs);
+          setMessage('Playlist reset');
+        }}
+      >
+        <RotateCcw size={15} />
+      </IconButton>
       <div className="playlist-footer">
         <span className="demo-hint">Press and hold a track to delete</span>
-        <button
-          className="text-button"
-          onClick={() => {
-            cancel();
-            setTracks(songs);
-            setMessage('Playlist reset');
-          }}
-        >
-          Reset playlist
-        </button>
       </div>
       <span className="sr-only" role="status">
         {message}

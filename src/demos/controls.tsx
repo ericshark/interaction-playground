@@ -3,22 +3,19 @@ import {
   AnimatePresence,
   LayoutGroup,
   motion,
-  Reorder,
   useDragControls,
 } from 'motion/react';
 import {
-  ArrowDown,
-  ArrowUp,
+  ArrowLeft,
+  ArrowRight,
   Bookmark,
   Check,
   Grip,
   Layers,
   LayoutGrid,
   List,
-  Moon,
   Pencil,
   Plus,
-  Sun,
   X,
 } from 'lucide-react';
 import {
@@ -215,70 +212,30 @@ function relativeOffset(minutes: number) {
   return `${minutes > 0 ? '+' : '−'}${hours}h${rest ? ` ${rest}m` : ''}`;
 }
 
-function Dial({
-  hour,
-  minute,
-  second,
-  night,
-}: {
-  hour: number;
-  minute: number;
-  second: number;
-  night: boolean;
-}) {
-  // Angles accumulate from the epoch so CSS transitions always sweep forward,
-  // even when the second hand wraps from 59 to 0.
-  const total = Math.floor(Date.now() / 1000);
-  const secondTurns = total * 6;
-  const minuteAngle = minute * 6 + second * 0.1;
-  const hourAngle = (hour % 12) * 30 + minute * 0.5;
-  return (
-    <svg
-      className={`clock-dial ${night ? 'night' : ''}`}
-      viewBox="0 0 48 48"
-      aria-hidden="true"
-    >
-      <circle cx="24" cy="24" r="22.5" />
-      {Array.from({ length: 12 }, (_, i) => (
-        <line
-          key={i}
-          x1="24"
-          y1={i % 3 === 0 ? 4.5 : 5.5}
-          x2="24"
-          y2="7.5"
-          transform={`rotate(${i * 30} 24 24)`}
-        />
-      ))}
-      <line
-        className="hour-hand"
-        x1="24"
-        y1="24"
-        x2="24"
-        y2="13"
-        style={{ transform: `rotate(${hourAngle}deg)` }}
-      />
-      <line
-        className="minute-hand"
-        x1="24"
-        y1="24"
-        x2="24"
-        y2="8.5"
-        style={{ transform: `rotate(${minuteAngle}deg)` }}
-      />
-      <line
-        className="second-hand"
-        x1="24"
-        y1="28"
-        x2="24"
-        y2="7"
-        style={{ transform: `rotate(${secondTurns}deg)` }}
-      />
-      <circle className="dial-pin" cx="24" cy="24" r="1.6" />
-    </svg>
-  );
+type Sky = 'night' | 'dawn' | 'day' | 'golden' | 'dusk';
+function skyFor(hour: number): Sky {
+  if (hour < 5 || hour >= 20.5) return 'night';
+  if (hour < 7.5) return 'dawn';
+  if (hour < 16.5) return 'day';
+  if (hour < 18.5) return 'golden';
+  return 'dusk';
+}
+const stars = Array.from({ length: 14 }, (_, i) => ({
+  left: (i * 37) % 97,
+  top: (i * 53) % 58,
+  delay: (i * 0.37) % 2.4,
+}));
+
+// The sun travels the arc from 06:00 to 18:00 and the moon the other half.
+function celestial(hour: number) {
+  const sun = hour >= 6 && hour < 18;
+  const t = sun ? (hour - 6) / 12 : ((hour + 6) % 24) / 12;
+  const x = (1 - t) ** 2 * 4 + 2 * (1 - t) * t * 50 + t ** 2 * 96;
+  const y = (1 - t) ** 2 * 38 + 2 * (1 - t) * t * -10 + t ** 2 * 38;
+  return { sun, x, y };
 }
 
-function ClockRow({
+function ClockTile({
   item,
   now,
   format,
@@ -288,6 +245,7 @@ function ClockRow({
   edit,
   remove,
   move,
+  drop,
 }: {
   item: ClockItem;
   now: Date;
@@ -298,12 +256,15 @@ function ClockRow({
   edit: () => void;
   remove: () => void;
   move: (direction: number) => void;
+  drop: (clientX: number, clientY: number) => void;
 }) {
   const dragControls = useDragControls();
   const city = cities[item.city];
-  const { hour, minute, second, offset } = zoneParts(city.zone, now);
+  const { hour, minute, offset } = zoneParts(city.zone, now);
   const localOffset = -now.getTimezoneOffset();
-  const night = hour < 6 || hour >= 19;
+  const exactHour = hour + minute / 60;
+  const sky = skyFor(exactHour);
+  const body = celestial(exactHour);
   const displayHour = format === '12' ? hour % 12 || 12 : hour;
   const time = `${String(displayHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
   const date = new Intl.DateTimeFormat('en-GB', {
@@ -313,21 +274,48 @@ function ClockRow({
     month: 'short',
   }).format(now);
   return (
-    <Reorder.Item
-      value={item}
+    <motion.li
+      layout
+      className={`clock-tile sky-${sky}`}
+      data-clock-id={item.id}
+      drag
       dragListener={false}
       dragControls={dragControls}
-      className="clock-widget"
-      initial={{ opacity: 0, y: 12, scale: 0.97 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.94, filter: 'blur(4px)' }}
-      whileDrag={{
-        scale: 1.025,
-        boxShadow: '0 20px 40px -18px #1b1b2340',
-        zIndex: 5,
+      dragSnapToOrigin
+      dragElastic={0.9}
+      whileDrag={{ scale: 1.04, zIndex: 10, cursor: 'grabbing' }}
+      onDragEnd={(event) => {
+        const point = 'clientX' in event ? event : event.changedTouches?.[0];
+        if (point) drop(point.clientX, point.clientY);
       }}
-      onDragEnd={() => playSound('tick')}
+      initial={{ opacity: 0, scale: 0.94 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9, filter: 'blur(6px)' }}
+      transition={{ type: 'spring', stiffness: 320, damping: 30 }}
     >
+      {sky === 'night' && (
+        <span className="clock-stars" aria-hidden="true">
+          {stars.map((star, i) => (
+            <i
+              key={i}
+              style={{
+                left: `${star.left}%`,
+                top: `${star.top}%`,
+                animationDelay: `${star.delay}s`,
+              }}
+            />
+          ))}
+        </span>
+      )}
+      <svg className="clock-arc" viewBox="0 0 100 40" aria-hidden="true">
+        <path d="M4 38Q50 -10 96 38" />
+        <circle
+          className={body.sun ? 'sun' : 'moon'}
+          cx={body.x}
+          cy={body.y}
+          r={body.sun ? 4.2 : 3.4}
+        />
+      </svg>
       <button
         className="drag-clock"
         aria-label={`Drag ${city.name} clock`}
@@ -335,37 +323,33 @@ function ClockRow({
       >
         <Grip size={13} />
       </button>
-      <Dial hour={hour} minute={minute} second={second} night={night} />
       <div className="clock-place">
         <strong>{city.name}</strong>
-        <span>
-          {date} · {relativeOffset(offset - localOffset)}
-        </span>
+        <span>{city.country}</span>
       </div>
       <div className="clock-time">
-        {night ? <Moon size={13} /> : <Sun size={13} />}
         <RollingText className="clock-digits" text={time} />
         {format === '12' && (
           <span className="clock-meridiem">{hour < 12 ? 'AM' : 'PM'}</span>
         )}
       </div>
-      <div className="clock-daybar" aria-hidden="true">
-        <i style={{ left: `${((hour + minute / 60) / 24) * 100}%` }} />
-      </div>
+      <span className="clock-meta">
+        {date} · {relativeOffset(offset - localOffset)}
+      </span>
       <div className="clock-actions">
         <IconButton
-          label={`Move ${city.name} clock up`}
+          label={`Move ${city.name} clock earlier`}
           disabled={index === 0}
           onClick={() => move(-1)}
         >
-          <ArrowUp size={12} />
+          <ArrowLeft size={12} />
         </IconButton>
         <IconButton
-          label={`Move ${city.name} clock down`}
+          label={`Move ${city.name} clock later`}
           disabled={index === count - 1}
           onClick={() => move(1)}
         >
-          <ArrowDown size={12} />
+          <ArrowRight size={12} />
         </IconButton>
         <IconButton label={`Change ${city.name} city`} onClick={edit}>
           <Pencil size={11} />
@@ -376,7 +360,7 @@ function ClockRow({
           </IconButton>
         )}
       </div>
-    </Reorder.Item>
+    </motion.li>
   );
 }
 
@@ -417,7 +401,7 @@ export function TimeZones() {
       <div className="timezones-heading">
         <div>
           <strong>World clock</strong>
-          <span>Drag to reorder</span>
+          <span>Drag a tile onto another to swap</span>
         </div>
         <Choices
           options={['12', '24'] as const}
@@ -479,15 +463,10 @@ export function TimeZones() {
           </AnimatePresence>
         </div>
       </div>
-      <Reorder.Group
-        axis="y"
-        values={items}
-        onReorder={setItems}
-        className="clock-widgets"
-      >
+      <motion.ul layout className="clock-widgets">
         <AnimatePresence initial={false}>
           {items.map((item, index) => (
-            <ClockRow
+            <ClockTile
               key={item.id}
               item={item}
               now={now}
@@ -503,10 +482,34 @@ export function TimeZones() {
                 );
               }}
               move={(direction) => move(item.id, direction)}
+              drop={(clientX, clientY) => {
+                const target = document
+                  .elementsFromPoint(clientX, clientY)
+                  .map((element) => element.closest('[data-clock-id]'))
+                  .find(
+                    (tile) =>
+                      tile &&
+                      Number(tile.getAttribute('data-clock-id')) !== item.id,
+                  );
+                if (!target) return;
+                const targetId = Number(target.getAttribute('data-clock-id'));
+                setItems((current) => {
+                  const from = current.findIndex(
+                    (clock) => clock.id === item.id,
+                  );
+                  const to = current.findIndex(
+                    (clock) => clock.id === targetId,
+                  );
+                  const result = [...current];
+                  [result[from], result[to]] = [result[to], result[from]];
+                  return result;
+                });
+                playSound('tick');
+              }}
             />
           ))}
         </AnimatePresence>
-      </Reorder.Group>
+      </motion.ul>
     </div>
   );
 }

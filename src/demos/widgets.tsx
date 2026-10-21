@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   ArrowUpRight,
@@ -13,7 +7,6 @@ import {
   Check,
   ChevronDown,
   CircleCheck,
-  Database,
   FastForward,
   Pause,
   Phone,
@@ -28,12 +21,13 @@ import {
   Choices,
   IconButton,
   RollingText,
-  spring,
   useActiveInterval,
   useDismiss,
+  usePreferences,
 } from '../core';
 import { playSound } from '../sound';
 import { useCanvas } from './graphics';
+import { dotPath, landDots, mapHeight, mapWidth, project } from './worldMap';
 
 const providers = ['Gemini', 'OpenAI', 'Claude', 'Siri'] as const;
 type Provider = (typeof providers)[number];
@@ -66,6 +60,7 @@ function speechLevel(time: number) {
 export function ChatOrb() {
   const [provider, setProvider] = useState<Provider>('Gemini');
   const [listening, setListening] = useState(false);
+  const { dark } = usePreferences();
   const orb = useRef({
     from: paletteRgb.Gemini,
     to: paletteRgb.Gemini,
@@ -76,9 +71,10 @@ export function ChatOrb() {
     lastTime: 0,
     phase: 0,
   });
-  const live = useRef({ provider, listening, hovered: false });
+  const live = useRef({ provider, listening, hovered: false, dark });
   live.current.provider = provider;
   live.current.listening = listening;
+  live.current.dark = dark;
 
   const canvas = useCanvas(
     (context, width, height, time) => {
@@ -87,199 +83,134 @@ export function ChatOrb() {
       state.lastTime = time;
       const target = paletteRgb[live.current.provider];
       if (target !== state.to) {
-        const t = Math.min(1, (time - state.switchedAt) / 0.6);
+        const t = Math.min(1, (time - state.switchedAt) / 0.8);
         state.from = state.from.map((color, i) => mix(color, state.to[i], t));
         state.to = target;
         state.switchedAt = time;
       }
-      const blend = Math.min(1, (time - state.switchedAt) / 0.6);
+      const blend = Math.min(1, (time - state.switchedAt) / 0.8);
       const eased = blend * blend * (3 - 2 * blend);
       const palette = state.from.map((color, i) =>
         mix(color, state.to[i], eased),
       );
       const approach = (value: number, goal: number, rate: number) =>
         value + (goal - value) * (1 - Math.exp(-dt * rate));
-      state.listen = approach(state.listen, live.current.listening ? 1 : 0, 4);
-      state.hover = approach(state.hover, live.current.hovered ? 1 : 0, 8);
+      state.listen = approach(state.listen, live.current.listening ? 1 : 0, 3);
+      state.hover = approach(state.hover, live.current.hovered ? 1 : 0, 6);
       state.level = approach(
         state.level,
         live.current.listening ? speechLevel(time) : 0,
-        14,
+        9,
       );
-      state.phase += dt * (1 + state.listen * 0.8 + state.level * 2.2);
+      state.phase += dt * (0.35 + state.listen * 0.25 + state.level * 0.6);
 
       const cx = width / 2;
       const cy = height / 2;
-      const base = Math.min(width, height) * 0.26;
       const radius =
-        base *
-        (1 +
-          Math.sin(time * 1.6) * 0.018 +
-          state.level * 0.08 +
-          state.hover * 0.035);
+        Math.min(width, height) *
+        0.3 *
+        (1 + Math.sin(time * 1.2) * 0.012 + state.hover * 0.025);
       const phase = state.phase;
+      const voice = state.listen * state.level;
       context.clearRect(0, 0, width, height);
 
       const halo = context.createRadialGradient(
         cx,
         cy,
-        radius * 0.7,
+        radius * 0.6,
         cx,
         cy,
-        radius * 1.9,
+        radius * 1.75,
       );
       halo.addColorStop(
         0,
-        rgba(palette[1], 0.22 + state.hover * 0.1 + state.level * 0.12),
+        rgba(palette[1], 0.12 + state.hover * 0.06 + voice * 0.22),
       );
       halo.addColorStop(1, rgba(palette[1], 0));
       context.fillStyle = halo;
       context.fillRect(0, 0, width, height);
 
-      if (state.listen > 0.01) {
-        for (let ring = 0; ring < 3; ring++) {
-          const progress = (time * 0.42 + ring / 3) % 1;
-          context.beginPath();
-          context.arc(
-            cx,
-            cy,
-            radius * (1.05 + progress * 0.75),
-            0,
-            Math.PI * 2,
-          );
-          context.strokeStyle = rgba(
-            palette[ring + 1],
-            (1 - progress) * 0.32 * state.listen,
-          );
-          context.lineWidth = 1.2;
-          context.stroke();
-        }
-        const bars = 72;
-        context.lineCap = 'round';
-        context.lineWidth = 2;
-        for (let i = 0; i < bars; i++) {
-          const angle = (i / bars) * Math.PI * 2 + phase * 0.15;
-          const ripple =
-            0.5 +
-            0.5 *
-              Math.sin(i * 0.9 + time * 9) *
-              Math.sin(i * 0.37 - time * 4.3);
-          const length = 3 + state.level * ripple * radius * 0.28;
-          const inner = radius * 1.14;
-          context.beginPath();
-          context.moveTo(
-            cx + Math.cos(angle) * inner,
-            cy + Math.sin(angle) * inner,
-          );
-          context.lineTo(
-            cx + Math.cos(angle) * (inner + length),
-            cy + Math.sin(angle) * (inner + length),
-          );
-          context.strokeStyle = rgba(
-            palette[i % palette.length],
-            0.55 * state.listen,
-          );
-          context.stroke();
-        }
-      }
-
-      const shadow = context.createRadialGradient(
-        cx,
-        cy + radius * 1.12,
-        0,
-        cx,
-        cy + radius * 1.12,
-        radius * 0.95,
-      );
-      shadow.addColorStop(0, rgba(palette[0], 0.28));
-      shadow.addColorStop(1, rgba(palette[0], 0));
+      const shadowY = cy + radius * 1.18;
       context.save();
-      context.translate(0, cy + radius * 1.12);
-      context.scale(1, 0.22);
-      context.translate(0, -(cy + radius * 1.12));
+      context.translate(cx, shadowY);
+      context.scale(1, 0.18);
+      const shadow = context.createRadialGradient(0, 0, 0, 0, 0, radius);
+      shadow.addColorStop(0, rgba(palette[0], live.current.dark ? 0.35 : 0.22));
+      shadow.addColorStop(1, rgba(palette[0], 0));
       context.fillStyle = shadow;
-      context.fillRect(cx - radius * 1.2, cy, radius * 2.4, radius * 2.4);
+      context.fillRect(-radius, -radius, radius * 2, radius * 2);
       context.restore();
 
-      context.save();
+      // The outline is a circle perturbed by a few slow harmonics, so the orb
+      // softly changes shape with the simulated voice instead of jittering.
       context.beginPath();
-      context.arc(cx, cy, radius, 0, Math.PI * 2);
+      for (let i = 0; i <= 96; i++) {
+        const angle = (i / 96) * Math.PI * 2;
+        const wobble =
+          voice *
+          (0.04 * Math.sin(angle * 3 + time * 1.3) +
+            0.025 * Math.sin(angle * 5 - time * 1.7) +
+            0.02 * Math.sin(angle * 2 + time * 0.9));
+        const r = radius * (1 + wobble);
+        const x = cx + Math.cos(angle) * r;
+        const y = cy + Math.sin(angle) * r;
+        if (i === 0) context.moveTo(x, y);
+        else context.lineTo(x, y);
+      }
+      context.closePath();
+      context.save();
       context.clip();
+      const extent = radius * 1.2;
       const body = context.createLinearGradient(
-        cx - radius,
-        cy - radius,
-        cx + radius,
-        cy + radius,
+        cx - extent,
+        cy - extent,
+        cx + extent,
+        cy + extent,
       );
       body.addColorStop(0, rgba(palette[1], 1));
       body.addColorStop(1, rgba(palette[0], 1));
       context.fillStyle = body;
-      context.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+      context.fillRect(cx - extent, cy - extent, extent * 2, extent * 2);
       palette.forEach((color, i) => {
         const x =
-          cx + Math.cos(phase * (0.55 + i * 0.13) + i * 1.9) * radius * 0.52;
+          cx + Math.cos(phase * (0.5 + i * 0.09) + i * 1.9) * radius * 0.45;
         const y =
-          cy + Math.sin(phase * (0.47 + i * 0.11) + i * 2.6) * radius * 0.52;
-        const blob = context.createRadialGradient(
-          x,
-          y,
-          0,
-          x,
-          y,
-          radius * (0.62 + 0.1 * Math.sin(phase + i)),
-        );
-        blob.addColorStop(0, rgba(color, 1));
-        blob.addColorStop(0.5, rgba(color, 0.55));
+          cy + Math.sin(phase * (0.42 + i * 0.07) + i * 2.6) * radius * 0.45;
+        const blob = context.createRadialGradient(x, y, 0, x, y, radius * 0.8);
+        blob.addColorStop(0, rgba(color, 0.85));
         blob.addColorStop(1, rgba(color, 0));
         context.fillStyle = blob;
-        context.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+        context.fillRect(cx - extent, cy - extent, extent * 2, extent * 2);
       });
+      const light = context.createRadialGradient(
+        cx - radius * 0.35,
+        cy - radius * 0.45,
+        0,
+        cx - radius * 0.35,
+        cy - radius * 0.45,
+        radius * 0.9,
+      );
+      light.addColorStop(0, 'rgba(255,255,255,0.42)');
+      light.addColorStop(1, 'rgba(255,255,255,0)');
+      context.fillStyle = light;
+      context.fillRect(cx - extent, cy - extent, extent * 2, extent * 2);
       const rim = context.createRadialGradient(
-        cx - radius * 0.2,
-        cy - radius * 0.25,
-        radius * 0.45,
         cx,
         cy,
-        radius,
+        radius * 0.7,
+        cx,
+        cy,
+        radius * 1.05,
       );
-      rim.addColorStop(0, 'rgba(255,255,255,0)');
-      rim.addColorStop(0.82, 'rgba(255,255,255,0.05)');
-      rim.addColorStop(1, rgba(palette[0], 0.35));
+      rim.addColorStop(0, rgba(palette[0], 0));
+      rim.addColorStop(1, rgba(palette[0], 0.28));
       context.fillStyle = rim;
-      context.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
-      const gloss = context.createRadialGradient(
-        cx - radius * 0.32,
-        cy - radius * 0.42,
-        0,
-        cx - radius * 0.32,
-        cy - radius * 0.42,
-        radius * 0.62,
-      );
-      gloss.addColorStop(0, 'rgba(255,255,255,0.78)');
-      gloss.addColorStop(0.45, 'rgba(255,255,255,0.18)');
-      gloss.addColorStop(1, 'rgba(255,255,255,0)');
-      context.fillStyle = gloss;
-      context.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
-      const bounce = context.createLinearGradient(
-        0,
-        cy + radius * 0.4,
-        0,
-        cy + radius,
-      );
-      bounce.addColorStop(0, 'rgba(255,255,255,0)');
-      bounce.addColorStop(1, 'rgba(255,255,255,0.32)');
-      context.fillStyle = bounce;
-      context.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+      context.fillRect(cx - extent, cy - extent, extent * 2, extent * 2);
       context.restore();
-
-      context.beginPath();
-      context.arc(cx, cy, radius - 0.5, 0, Math.PI * 2);
-      context.strokeStyle = 'rgba(255,255,255,0.65)';
+      context.strokeStyle = live.current.dark
+        ? 'rgba(255,255,255,0.14)'
+        : 'rgba(255,255,255,0.55)';
       context.lineWidth = 1;
-      context.stroke();
-      context.beginPath();
-      context.arc(cx, cy, radius + 0.5, 0, Math.PI * 2);
-      context.strokeStyle = 'rgba(20,20,40,0.07)';
       context.stroke();
     },
     false,
@@ -336,230 +267,323 @@ export function ChatOrb() {
   );
 }
 
-const locations = [
-  { name: 'Oregon', detail: 'US West', x: 100, y: 85 },
-  { name: 'Virginia', detail: 'US East', x: 152, y: 92 },
-  { name: 'Frankfurt', detail: 'Europe', x: 286, y: 65 },
-  { name: 'Singapore', detail: 'Asia Pacific', x: 436, y: 156 },
-  { name: 'Sydney', detail: 'Australia', x: 480, y: 211 },
+const regions = [
+  {
+    name: 'Oregon',
+    region: 'US West',
+    code: 'US',
+    id: 'us-west-2',
+    lon: -122.7,
+    lat: 45.5,
+    latency: 68,
+  },
+  {
+    name: 'Virginia',
+    region: 'US East',
+    code: 'US',
+    id: 'us-east-1',
+    lon: -77.5,
+    lat: 38.9,
+    latency: 12,
+  },
+  {
+    name: 'São Paulo',
+    region: 'South America',
+    code: 'BR',
+    id: 'sa-east-1',
+    lon: -46.6,
+    lat: -23.5,
+    latency: 118,
+  },
+  {
+    name: 'London',
+    region: 'Europe West',
+    code: 'GB',
+    id: 'eu-west-2',
+    lon: -0.1,
+    lat: 51.5,
+    latency: 76,
+  },
+  {
+    name: 'Frankfurt',
+    region: 'Europe Central',
+    code: 'DE',
+    id: 'eu-central-1',
+    lon: 8.7,
+    lat: 50.1,
+    latency: 89,
+  },
+  {
+    name: 'Mumbai',
+    region: 'Asia South',
+    code: 'IN',
+    id: 'ap-south-1',
+    lon: 72.9,
+    lat: 19.1,
+    latency: 182,
+  },
+  {
+    name: 'Singapore',
+    region: 'Asia Southeast',
+    code: 'SG',
+    id: 'ap-southeast-1',
+    lon: 103.8,
+    lat: 1.4,
+    latency: 214,
+  },
+  {
+    name: 'Tokyo',
+    region: 'Asia Northeast',
+    code: 'JP',
+    id: 'ap-northeast-1',
+    lon: 139.7,
+    lat: 35.7,
+    latency: 148,
+  },
+  {
+    name: 'Sydney',
+    region: 'Oceania',
+    code: 'AU',
+    id: 'ap-southeast-2',
+    lon: 151.2,
+    lat: -33.9,
+    latency: 198,
+  },
 ];
-export function LocationSelector() {
-  const [workspace, setWorkspace] = useState('Silverstone Dynamics');
-  const [project, setProject] = useState('CircuitHub');
-  const [location, setLocation] = useState('Oregon');
-  const [created, setCreated] = useState(false);
-  const selected = locations.find((item) => item.name === location)!;
-  const reset = () => {
-    setCreated(false);
-    setWorkspace('Silverstone Dynamics');
-    setProject('CircuitHub');
-    setLocation('Oregon');
+const home = regions[1];
+const worldDots = dotPath(landDots);
+const zoomedWidth = mapWidth / 1.65;
+const zoomedHeight = zoomedWidth / 2.1;
+
+function viewBoxFor(region: (typeof regions)[number]) {
+  const { x, y } = project(region.lon, region.lat);
+  const left = Math.min(
+    Math.max(x - zoomedWidth / 2, 0),
+    mapWidth - zoomedWidth,
+  );
+  const top = Math.min(
+    Math.max(y - zoomedHeight / 2, 0),
+    mapHeight - zoomedHeight,
+  );
+  return `${left} ${top} ${zoomedWidth} ${zoomedHeight}`;
+}
+
+function LocationSelect({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (index: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(value);
+  const ref = useRef<HTMLDivElement>(null);
+  const typed = useRef({ text: '', at: 0 });
+  useDismiss(ref, open, () => setOpen(false));
+  const current = regions[value];
+  const show = () => {
+    setActive(value);
+    setOpen(true);
+  };
+  const commit = (index: number) => {
+    onChange(index);
+    setOpen(false);
+    playSound('tick');
   };
   return (
-    <div className="location-demo">
-      <AnimatePresence mode="wait">
-        {created ? (
-          <motion.div
-            className="database-success"
-            key="created"
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
+    <div className="location-select" ref={ref}>
+      <button
+        type="button"
+        className="location-trigger"
+        role="combobox"
+        aria-label="Database location"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls="location-options"
+        aria-activedescendant={open ? `location-option-${active}` : undefined}
+        onClick={() => (open ? setOpen(false) : show())}
+        onKeyDown={(event) => {
+          const move = (index: number) => {
+            event.preventDefault();
+            if (!open) show();
+            setActive(Math.max(0, Math.min(regions.length - 1, index)));
+          };
+          if (event.key === 'ArrowDown') move(open ? active + 1 : value);
+          else if (event.key === 'ArrowUp') move(open ? active - 1 : value);
+          else if (event.key === 'Home') move(0);
+          else if (event.key === 'End') move(regions.length - 1);
+          else if ((event.key === 'Enter' || event.key === ' ') && open) {
+            event.preventDefault();
+            commit(active);
+          } else if (event.key.length === 1 && /\S/.test(event.key)) {
+            // Type-ahead: jump to the next location starting with the typed text.
+            const now = performance.now();
+            typed.current.text =
+              (now - typed.current.at > 700 ? '' : typed.current.text) +
+              event.key.toLowerCase();
+            typed.current.at = now;
+            const start = open ? active : value;
+            const order = regions.map(
+              (_, i) => (start + 1 + i) % regions.length,
+            );
+            const match = order.find((i) =>
+              regions[i].name.toLowerCase().startsWith(typed.current.text),
+            );
+            if (match !== undefined) move(match);
+          }
+        }}
+      >
+        <span className="region-code">{current.code}</span>
+        <span className="location-trigger-text">
+          <strong>{current.name}</strong>
+          <small>
+            {current.region} · {current.id}
+          </small>
+        </span>
+        <ChevronDown size={15} className={open ? 'rotated' : ''} />
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.ul
+            id="location-options"
+            className="location-options"
+            role="listbox"
+            aria-label="Database locations"
+            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+            transition={{ type: 'spring', stiffness: 460, damping: 32 }}
           >
-            <span className="success-icon">
-              <Database size={23} />
-              <Check size={12} />
-            </span>
-            <h3>You're all set.</h3>
-            <p>
-              <strong>{project}</strong> is ready in {location}.
-            </p>
-            <span className="muted small">
-              Local preview · nothing was provisioned
-            </span>
-            <button className="secondary-button" onClick={reset}>
-              Create another
-            </button>
-          </motion.div>
-        ) : (
-          <motion.form
-            key="form"
-            className="location-form"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (workspace.trim() && project.trim()) setCreated(true);
-            }}
-          >
-            <div className="location-fields">
-              <label>
-                Workspace name
-                <input
-                  required
-                  maxLength={70}
-                  value={workspace}
-                  onChange={(e) => setWorkspace(e.target.value)}
-                />
-              </label>
-              <label>
-                Project name
-                <input
-                  required
-                  maxLength={70}
-                  value={project}
-                  onChange={(e) => setProject(e.target.value)}
-                />
-              </label>
-              <div className="location-bottom">
-                <label>
-                  Database location
-                  <select
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                  >
-                    {locations.map((item) => (
-                      <option key={item.name}>{item.name}</option>
-                    ))}
-                  </select>
-                  <span className="region-detail">{selected.detail}</span>
-                </label>
-                <div className="location-map">
-                  <svg
-                    viewBox="0 0 560 270"
-                    role="img"
-                    aria-label={`Selected database region: ${location}`}
-                  >
-                    <defs>
-                      <radialGradient id="map-fade">
-                        <stop offset="50%" stopColor="white" />
-                        <stop offset="100%" stopColor="white" stopOpacity="0" />
-                      </radialGradient>
-                      <mask id="map-mask">
-                        <rect width="560" height="270" fill="url(#map-fade)" />
-                      </mask>
-                    </defs>
-                    <g
-                      mask="url(#map-mask)"
-                      fill="#e9ebea"
-                      stroke="#d0d6d3"
-                      strokeWidth="1"
-                    >
-                      <path d="M42 32 95 20 158 42 188 79 162 120 143 127 127 168 109 145 105 119 79 102 62 67Z" />
-                      <path d="M146 145 176 151 197 180 185 223 163 256 153 213 140 179Z" />
-                      <path d="M251 51 283 29 306 45 324 31 345 57 394 40 450 56 510 90 481 111 435 99 412 129 391 117 359 147 333 107 304 100 279 86 256 90Z" />
-                      <path d="M277 99 314 105 337 143 315 198 290 193 269 144Z" />
-                      <path d="M452 198 488 184 520 217 502 240 462 232Z" />
-                      <path
-                        d="M88 20 93 105M115 41 162 120M279 49 282 86M301 43 304 100M365 60 359 124M428 70 410 128M288 129 322 139"
-                        fill="none"
-                      />
-                    </g>
-                    <motion.g
-                      initial={false}
-                      animate={{ x: selected.x, y: selected.y }}
-                      transition={spring}
-                    >
-                      <circle
-                        cx="0"
-                        cy="0"
-                        r="15"
-                        fill="#b390ed"
-                        opacity="0.13"
-                      />
-                      <circle
-                        cx="0"
-                        cy="0"
-                        r="5"
-                        fill="#a271df"
-                        stroke="white"
-                        strokeWidth="2"
-                      />
-                    </motion.g>
-                  </svg>
-                </div>
-              </div>
-            </div>
-            <div className="form-actions">
-              <button type="button" className="text-button" onClick={reset}>
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={!workspace.trim() || !project.trim()}
+            {regions.map((region, i) => (
+              <li
+                key={region.id}
+                id={`location-option-${i}`}
+                role="option"
+                aria-selected={value === i}
+                className={active === i ? 'active' : ''}
+                onPointerEnter={() => setActive(i)}
+                onClick={() => commit(i)}
               >
-                Create database
-              </button>
-            </div>
-          </motion.form>
+                <span className="region-code">{region.code}</span>
+                <span className="location-option-text">
+                  <strong>{region.name}</strong>
+                  <small>{region.region}</small>
+                </span>
+                <span
+                  className="latency"
+                  aria-label={`${region.latency} milliseconds`}
+                >
+                  <i
+                    style={{ width: `${Math.min(100, region.latency / 2.2)}%` }}
+                  />
+                  {region.latency}ms
+                </span>
+                <Check
+                  size={13}
+                  className="location-check"
+                  style={{ opacity: value === i ? 1 : 0 }}
+                />
+              </li>
+            ))}
+          </motion.ul>
         )}
       </AnimatePresence>
     </div>
   );
 }
 
-// Original geometric marks drawn for this study (not real brand logos).
-const sendMarks: { name: string; mark: ReactNode }[] = [
-  {
-    name: 'Blocks',
-    mark: (
-      <>
-        <path d="M8 10h10v8H8zM18 18h8v10h-8zM8 28h10v10H8zM26 10h14v8H26zM30 18h10v8H30zM26 30h8v8h-8z" />
-        <circle cx="10" cy="42" r="1.6" />
-      </>
+export function LocationSelector() {
+  const [selected, setSelected] = useState(0);
+  const region = regions[selected];
+  const point = project(region.lon, region.lat);
+  const origin = project(home.lon, home.lat);
+  const distance = Math.hypot(point.x - origin.x, point.y - origin.y);
+  const arc = `M${origin.x} ${origin.y}Q${(origin.x + point.x) / 2} ${
+    Math.min(origin.y, point.y) - distance * 0.28
+  } ${point.x} ${point.y}`;
+  const label = `${region.name} · ${region.latency}ms`;
+  const nearby = dotPath(
+    landDots.filter(
+      (dot) =>
+        Math.hypot(dot.longitude - region.lon, dot.latitude - region.lat) < 13,
     ),
-  },
-  {
-    name: 'Prism',
-    mark: (
-      <>
-        <path d="M22 6 10 24l12 18zM26 6v36l12-18z" />
-        <path d="M30 40h2v2h-2z" />
-      </>
-    ),
-  },
-  {
-    name: 'Bolt',
-    mark: (
-      <>
-        <path d="M18 8h18L24 22h14L18 42l6-14H10z" />
-        <circle
-          cx="38"
-          cy="38"
-          r="3"
-          fill="none"
-          strokeWidth="1.4"
-          stroke="currentColor"
-        />
-      </>
-    ),
-  },
-  {
-    name: 'Loop',
-    mark: (
-      <>
-        <path d="M25 5a10 10 0 0 1 0 20zM23 23a10 10 0 0 0 0 20z" />
-        <path d="M23 5a10 10 0 0 0-10 10h10zM25 43a10 10 0 0 0 10-10H25z" />
-      </>
-    ),
-  },
-];
-
-function Mark({ index, size = 44 }: { index: number; size?: number }) {
+  );
   return (
-    <svg
-      viewBox="0 0 48 48"
-      width={size}
-      height={size}
-      aria-hidden="true"
-      fill="currentColor"
-    >
-      {sendMarks[index].mark}
-    </svg>
+    <div className="location-demo">
+      <div className="location-heading">
+        <div>
+          <strong>Database region</strong>
+          <span>Choose where your data lives</span>
+        </div>
+        <LocationSelect value={selected} onChange={setSelected} />
+      </div>
+      <div className="location-map">
+        <motion.svg
+          role="img"
+          aria-label={`Selected database region: ${region.name}`}
+          initial={false}
+          animate={{ viewBox: viewBoxFor(region) }}
+          transition={{ type: 'spring', stiffness: 70, damping: 18 }}
+          preserveAspectRatio="xMidYMid slice"
+        >
+          <path className="map-dots" d={worldDots} />
+          <motion.path
+            key={`near-${region.id}`}
+            className="map-dots near"
+            d={nearby}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.25 }}
+          />
+          {region !== home && (
+            <motion.path
+              key={`arc-${region.id}`}
+              className="map-arc"
+              d={arc}
+              initial={{ pathLength: 0, opacity: 0 }}
+              animate={{ pathLength: 1, opacity: 1 }}
+              transition={{ duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
+            />
+          )}
+          <circle className="map-home" cx={origin.x} cy={origin.y} r="3" />
+          <g transform={`translate(${point.x} ${point.y})`}>
+            <circle className="map-pulse" r="5" />
+            <circle className="map-marker" r="4.2" />
+            <motion.g
+              key={`label-${region.id}`}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.5, duration: 0.35 }}
+            >
+              <rect
+                className="map-label"
+                x="10"
+                y="-23"
+                width={label.length * 5.2 + 18}
+                height="19"
+                rx="9.5"
+              />
+              <text className="map-label-text" x="19" y="-10">
+                {label}
+              </text>
+            </motion.g>
+          </g>
+        </motion.svg>
+      </div>
+      <p className="location-footnote">
+        <span className="live-dot" />
+        {region.id} · about {region.latency}ms from you
+      </p>
+    </div>
   );
 }
+
+const sendPhotos = [
+  { name: 'Wildflowers', src: '/images/photo-1.jpg' },
+  { name: 'Soft landscape', src: '/images/photo-3.jpg' },
+  { name: 'Orange bloom', src: '/images/gallery-3.jpg' },
+  { name: 'Glass garden', src: '/images/photo-5.jpg' },
+];
 
 type SendStatus = 'closed' | 'open' | 'sending' | 'delivering' | 'sent';
 
@@ -607,7 +631,7 @@ export function ImageSend() {
                 <RollingText className="send-count" text={String(count)} />
               </div>
               <div className="send-tiles">
-                {sendMarks.map(({ name }, i) => {
+                {sendPhotos.map(({ name, src }, i) => {
                   const isSelected = selected.includes(i + 1);
                   return (
                     <motion.button
@@ -648,7 +672,7 @@ export function ImageSend() {
                         );
                       }}
                     >
-                      <Mark index={i} />
+                      <img src={src} alt={name} draggable={false} />
                       <span className="send-check">
                         <AnimatePresence>
                           {isSelected && (
@@ -752,7 +776,14 @@ export function ImageSend() {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.6 }}
                   >
-                    <Mark index={3} size={34} />
+                    {sendPhotos.slice(0, 3).map(({ src }, i) => (
+                      <img
+                        key={src}
+                        src={src}
+                        alt=""
+                        style={{ '--i': i } as CSSProperties}
+                      />
+                    ))}
                   </motion.span>
                 )}
               </AnimatePresence>

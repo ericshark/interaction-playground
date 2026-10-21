@@ -46,8 +46,12 @@ function writePreference(key: string, value: boolean) {
 const PreferencesContext = createContext({
   reduced: false,
   sound: true,
+  dark: false,
+  spotlight: false,
   setReduced: (_value: boolean) => {},
   setSound: (_value: boolean) => {},
+  setDark: (_value: boolean) => {},
+  setSpotlight: (_value: boolean) => {},
 });
 
 // The playground is a motion study, so it animates by default even when the
@@ -59,6 +63,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [sound, setSound] = useState(() =>
     readPreference('playground:sound', true),
   );
+  const [dark, setDark] = useState(() =>
+    readPreference('playground:dark', false),
+  );
+  const [spotlight, setSpotlight] = useState(() =>
+    readPreference('playground:spotlight', false),
+  );
   useEffect(() => {
     document.documentElement.dataset.motion = reduced ? 'reduced' : 'full';
     writePreference('playground:reduce-motion', reduced);
@@ -67,9 +77,29 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     setSoundEnabled(sound);
     writePreference('playground:sound', sound);
   }, [sound]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', dark ? '#0a0a0b' : '#ffffff');
+    writePreference('playground:dark', dark);
+  }, [dark]);
+  useEffect(() => {
+    document.documentElement.dataset.spotlight = String(spotlight);
+    writePreference('playground:spotlight', spotlight);
+  }, [spotlight]);
   return (
     <PreferencesContext.Provider
-      value={{ reduced, sound, setReduced, setSound }}
+      value={{
+        reduced,
+        sound,
+        dark,
+        spotlight,
+        setReduced,
+        setSound,
+        setDark,
+        setSpotlight,
+      }}
     >
       <MotionConfig
         reducedMotion={reduced ? 'always' : 'never'}

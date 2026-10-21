@@ -9,6 +9,7 @@ import {
   useMotionValueEvent,
   useTransform,
   type AnimationPlaybackControls,
+  type MotionStyle,
   type MotionValue,
 } from 'motion/react';
 import {
@@ -274,6 +275,7 @@ const slab = [
 ];
 
 const stackNames = ['Connections', 'Messages', 'Terminal', 'Browser', 'Notes'];
+const stackAccents = ['#3a9cf0', '#3fb27f', '#e0a03a', '#8b6cf0', '#e8587a'];
 function SpatialCardContent({ index }: { index: number }) {
   if (index === 0)
     return (
@@ -385,11 +387,14 @@ export function StackedCards() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.6, delay: 0.15 }}
-          style={{
-            left: origin.x,
-            top: origin.y,
-            width: cardWidth,
-          }}
+          style={
+            {
+              left: origin.x,
+              top: origin.y,
+              width: cardWidth,
+              '--accent': stackAccents[selected],
+            } as MotionStyle
+          }
         />
         <div
           className="spatial-stack"
@@ -414,7 +419,13 @@ export function StackedCards() {
                   y: depth * depthStep.y,
                   '--depth': depth,
                 }}
-                style={{ zIndex: 10 - depth, skewY: 16 }}
+                style={
+                  {
+                    zIndex: 10 - depth,
+                    skewY: 16,
+                    '--accent': stackAccents[i],
+                  } as MotionStyle
+                }
                 transition={{ type: 'spring', stiffness: 210, damping: 26 }}
                 onClick={() => setSelected(selected === i ? (i + 1) % 5 : i)}
               >
@@ -644,11 +655,14 @@ export function ImageGallery() {
             />
             <AnimatePresence>
               {selected === i && (
+                // The caption fades in only after the tile settles, and leaves
+                // instantly, so it is never stretched by the tile's resize.
                 <motion.span
+                  layout="position"
                   className="image-caption"
                   initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
+                  animate={{ opacity: 1, transition: { delay: 0.3 } }}
+                  exit={{ opacity: 0, transition: { duration: 0 } }}
                 >
                   A closer look <span>↗</span>
                 </motion.span>
@@ -658,117 +672,5 @@ export function ImageGallery() {
         ))}
       </div>
     </LayoutGroup>
-  );
-}
-
-const info = [
-  {
-    category: 'Color Trends',
-    title: 'Vibrant Gradients: The New Wave in Digital Design',
-  },
-  {
-    category: 'Design Inspiration',
-    title: 'Soothing Pastels: Creating Calm in Digital Spaces',
-  },
-  {
-    category: 'Design Techniques',
-    title: 'Mastering Gradient Blending for Stunning Visuals',
-  },
-];
-const slideFront = {
-  y: 0,
-  scale: 1,
-  opacity: 1,
-  filter: 'blur(0px)',
-};
-const slideBehind = {
-  y: 14,
-  scale: 0.92,
-  opacity: 1,
-  filter: 'blur(0px)',
-};
-const slideLifted = {
-  y: -38,
-  scale: 1.03,
-  opacity: 0,
-  filter: 'blur(8px)',
-};
-
-export function InfoCarousel() {
-  const { index, progress, setIndex, setPaused } = useAutoplay(3, 5000);
-  const previous = useRef(info.map((_, i) => i));
-  useEffect(() => {
-    previous.current = info.map((_, i) => wrap(i - index, 3));
-  });
-  return (
-    <div
-      className="info-carousel"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-      onFocusCapture={() => setPaused(true)}
-      onBlurCapture={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget)) setPaused(false);
-      }}
-    >
-      <div className="info-carousel-stack">
-        {info.map((item, i) => {
-          const position = wrap(i - index, 3);
-          const fromHidden = previous.current[i] === 2;
-          return (
-            <motion.div
-              key={item.title}
-              className="info-slide"
-              aria-hidden={position !== 0}
-              initial={false}
-              animate={
-                position === 0
-                  ? slideFront
-                  : position === 1
-                    ? fromHidden
-                      ? {
-                          ...slideBehind,
-                          y: [30, slideBehind.y],
-                          scale: [0.84, slideBehind.scale],
-                          opacity: [0, 1],
-                        }
-                      : slideBehind
-                    : slideLifted
-              }
-              style={{ zIndex: 3 - position }}
-              transition={{ type: 'spring', stiffness: 220, damping: 28 }}
-            >
-              <img src={`/images/info-${i + 1}.jpg`} alt="" loading="lazy" />
-              <div>
-                <span>{item.category}</span>
-                <p>{item.title}</p>
-              </div>
-            </motion.div>
-          );
-        })}
-      </div>
-      <div
-        className="carousel-dots"
-        role="group"
-        aria-label="Info carousel slides"
-      >
-        {info.map((item, i) => (
-          <motion.button
-            key={item.title}
-            aria-label={`Show slide ${i + 1}: ${item.category}`}
-            aria-pressed={i === index}
-            onClick={() => setIndex(i)}
-            animate={{ width: index === i ? 40 : 6 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 30 }}
-          >
-            {index === i && (
-              <motion.span
-                className="slide-progress"
-                style={{ scaleX: progress }}
-              />
-            )}
-          </motion.button>
-        ))}
-      </div>
-    </div>
   );
 }

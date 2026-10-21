@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { IconButton, useActivity } from '../core';
+import { IconButton, useActivity, usePreferences } from '../core';
+import { playSound } from '../sound';
 
 export function useCanvas(
   draw: (
@@ -75,6 +76,7 @@ const logoNames = [
 
 export function AsciiLogos() {
   const [logo, setLogo] = useState(0);
+  const ink = usePreferences().dark ? '236,236,239' : '23,23,23';
   const mask = useRef<HTMLCanvasElement | null>(null);
   const canvas = useCanvas((context, width, height, time) => {
     context.clearRect(0, 0, width, height);
@@ -179,7 +181,7 @@ export function AsciiLogos() {
         const alpha = pixels[(y * columns + x) * 4 + 3] / 255;
         if (alpha < 0.12) continue;
         const flicker = Math.sin(x * 2.1 + y * 0.8 + time * 3);
-        context.fillStyle = `rgba(23,23,23,${0.4 + alpha * 0.6})`;
+        context.fillStyle = `rgba(${ink},${0.4 + alpha * 0.6})`;
         context.fillText(
           chars[
             Math.min(chars.length - 1, Math.floor(alpha * 4 + (flicker + 1)))
@@ -340,9 +342,15 @@ function stepMatrix(state: MatrixState, dt: number) {
   }
 }
 
+const lensRadius = 95;
+const glitchLength = 0.7;
+
 export function Matrix() {
   const [paused, setPaused] = useState(false);
+  const { dark } = usePreferences();
   const state = useRef<MatrixState | null>(null);
+  const pointer = useRef({ x: 0, y: 0, inside: false, lens: 0 });
+  const glitch = useRef({ x: 0, y: 0, start: -10, pending: false });
   const canvas = useCanvas(
     (context, width, height, time) => {
       const cell = width < 400 ? 11 : 13.5;
@@ -368,73 +376,162 @@ export function Matrix() {
       const dt = Math.min(time - matrix.lastTime, 0.1);
       matrix.lastTime = time;
       if (dt > 0) stepMatrix(matrix, dt);
+      const lens = pointer.current;
+      lens.lens +=
+        ((lens.inside ? 1 : 0) - lens.lens) * (1 - Math.exp(-dt * 8));
+      if (glitch.current.pending) {
+        glitch.current.start = time;
+        glitch.current.pending = false;
+      }
+      const burst = (time - glitch.current.start) / glitchLength;
+      const glitching = burst >= 0 && burst < 1;
 
-      context.clearRect(0, 0, width, height);
+      const ink = dark ? '236,236,239' : '18,19,24';
+      const trail = dark ? '150,152,162' : '70,72,82';
       const left = (width - columns * cell) / 2;
       const top = (height - rows * cell) / 2;
-      context.font = `500 ${cell * 0.78}px "Geist Mono", Departure, monospace`;
-      context.textAlign = 'center';
-      context.textBaseline = 'middle';
-      matrix.drops.forEach((drop, column) => {
-        const head = Math.floor(drop.head);
-        for (let k = 0; k < drop.length; k++) {
-          const row = head - k;
-          if (row < 0 || row >= rows) continue;
-          const alpha = k === 0 ? 0.92 : 0.5 * (1 - k / drop.length) + 0.05;
-          context.fillStyle =
-            k === 0 ? `rgba(18,19,24,${alpha})` : `rgba(70,72,82,${alpha})`;
-          context.fillText(
-            matrix.glyphs[row * columns + column],
-            left + (column + 0.5) * cell,
-            top + (row + 0.5) * cell,
-          );
-        }
-      });
-      context.font = `600 ${cell * 0.86}px "Geist Mono", Departure, monospace`;
-      for (const snippet of matrix.snippets) {
-        const typed = Math.floor(snippet.typed);
-        const y = top + snippet.row * cell;
-        const progress = snippet.phase === 'dissolving' ? snippet.timer : -1;
-        context.fillStyle = '#fff';
-        context.fillRect(
-          left + snippet.column * cell - 2,
-          y,
-          (typed + 1) * cell + 4,
-          cell,
-        );
-        for (let i = 0; i < typed; i++) {
-          const threshold = snippet.thresholds[i];
-          if (progress > threshold) continue;
-          const char =
-            progress > threshold - 0.25
-              ? matrix.glyphs[
-                  (snippet.row * columns + snippet.column + i) %
-                    matrix.glyphs.length
+      const waveRadius = burst * Math.hypot(width, height);
+      // Glyphs on the expanding glitch wavefront are drawn scrambled.
+      const scrambled = (x: number, y: number) =>
+        glitching &&
+        Math.abs(
+          Math.hypot(x - glitch.current.x, y - glitch.current.y) - waveRadius,
+        ) < 26;
+
+      const paint = (shiftX: number, tint?: string) => {
+        context.font = `500 ${cell * 0.78}px "Geist Mono", Departure, monospace`;
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
+        matrix.drops.forEach((drop, column) => {
+          const head = Math.floor(drop.head);
+          for (let k = 0; k < drop.length; k++) {
+            const row = head - k;
+            if (row < 0 || row >= rows) continue;
+            let x = left + (column + 0.5) * cell;
+            let y = top + (row + 0.5) * cell;
+            let alpha = k === 0 ? 0.92 : 0.5 * (1 - k / drop.length) + 0.05;
+            if (lens.lens > 0.01) {
+              const dx = x - lens.x;
+              const dy = y - lens.y;
+              const distance = Math.hypot(dx, dy);
+              if (distance < lensRadius) {
+                // Glyphs near the pointer brighten and bulge outward.
+                const pull = (1 - distance / lensRadius) * lens.lens;
+                x += (dx / (distance || 1)) * pull * 9;
+                y += (dy / (distance || 1)) * pull * 9;
+                alpha = Math.min(1, alpha + pull * 0.8);
+              }
+            }
+            context.fillStyle =
+              tint ?? `rgba(${k === 0 ? ink : trail},${alpha})`;
+            const glyph = scrambled(x, y)
+              ? rainGlyphs[
+                  (row * 7 + column * 3 + Math.floor(time * 40)) %
+                    rainGlyphs.length
                 ]
-              : snippet.text[i];
-          context.fillStyle =
-            progress > threshold - 0.25 ? 'rgba(70,72,82,0.55)' : '#121318';
-          context.fillText(
-            char,
-            left + (snippet.column + i + 0.5) * cell,
-            y + cell / 2,
+              : matrix.glyphs[row * columns + column];
+            context.fillText(glyph, x + shiftX, y);
+          }
+        });
+        context.font = `600 ${cell * 0.86}px "Geist Mono", Departure, monospace`;
+        for (const snippet of matrix.snippets) {
+          const typed = Math.floor(snippet.typed);
+          const y = top + snippet.row * cell;
+          const x = left + snippet.column * cell;
+          const progress = snippet.phase === 'dissolving' ? snippet.timer : -1;
+          if (!tint) {
+            const hovered =
+              lens.lens > 0.5 &&
+              lens.y >= y - 4 &&
+              lens.y <= y + cell + 4 &&
+              lens.x >= x - 4 &&
+              lens.x <= x + (typed + 1) * cell + 4;
+            context.fillStyle = dark ? '#0a0a0b' : '#fff';
+            context.fillRect(x - 2, y, (typed + 1) * cell + 4, cell);
+            if (hovered) {
+              context.fillStyle = 'rgba(111,124,242,0.16)';
+              context.fillRect(x - 4, y - 2, (typed + 1) * cell + 8, cell + 4);
+            }
+          }
+          for (let i = 0; i < typed; i++) {
+            const threshold = snippet.thresholds[i];
+            if (progress > threshold) continue;
+            const charX = x + (i + 0.5) * cell;
+            const dissolving = progress > threshold - 0.25;
+            const char =
+              dissolving || scrambled(charX, y)
+                ? matrix.glyphs[
+                    (snippet.row * columns + snippet.column + i) %
+                      matrix.glyphs.length
+                  ]
+                : snippet.text[i];
+            context.fillStyle =
+              tint ?? (dissolving ? `rgba(${trail},0.55)` : `rgb(${ink})`);
+            context.fillText(char, charX + shiftX, y + cell / 2);
+          }
+          const showCursor =
+            snippet.phase === 'typing' ||
+            snippet.phase === 'erasing' ||
+            (snippet.phase === 'holding' && Math.floor(time * 2.4) % 2 === 0);
+          if (showCursor && !tint) {
+            context.fillStyle = `rgb(${ink})`;
+            context.fillRect(
+              x + typed * cell + cell * 0.18,
+              y + cell * 0.8,
+              cell * 0.64,
+              1.5,
+            );
+          }
+        }
+      };
+
+      context.clearRect(0, 0, width, height);
+      if (glitching) {
+        // Chromatic split: tinted copies drift apart, then settle back.
+        const split = (1 - burst) * 7;
+        paint(-split, 'rgba(255,40,110,0.45)');
+        paint(split, 'rgba(0,190,255,0.45)');
+      }
+      paint(0);
+      if (glitching) {
+        const element = context.canvas;
+        const scale = element.width / width;
+        const frame = Math.floor(time * 24);
+        for (let n = 0; n < 7; n++) {
+          const seed = Math.sin(frame * 12.9898 + n * 78.233) * 43758.5453;
+          const random = seed - Math.floor(seed);
+          const sliceY = random * height;
+          const sliceHeight = 6 + ((random * 97) % 1) * 26;
+          const offset = (((random * 13) % 1) - 0.5) * 60 * (1 - burst);
+          context.drawImage(
+            element,
+            0,
+            sliceY * scale,
+            element.width,
+            sliceHeight * scale,
+            offset,
+            sliceY,
+            width,
+            sliceHeight,
           );
         }
-        const showCursor =
-          snippet.phase === 'typing' ||
-          snippet.phase === 'erasing' ||
-          (snippet.phase === 'holding' && Math.floor(time * 2.4) % 2 === 0);
-        if (showCursor)
-          context.fillRect(
-            left + (snippet.column + typed) * cell + cell * 0.18,
-            y + cell * 0.8,
-            cell * 0.64,
-            1.5,
-          );
+        if (burst < 0.18) {
+          context.fillStyle = `rgba(${ink},${0.08 * (1 - burst / 0.18)})`;
+          context.fillRect(0, 0, width, height);
+        }
+      }
+      if (lens.lens > 0.01) {
+        context.beginPath();
+        context.arc(lens.x, lens.y, lensRadius * 0.92, 0, Math.PI * 2);
+        context.strokeStyle = `rgba(111,124,242,${0.22 * lens.lens})`;
+        context.setLineDash([2, 5]);
+        context.lineDashOffset = -time * 14;
+        context.stroke();
+        context.setLineDash([]);
       }
     },
     paused,
-    33,
+    16,
   );
   return (
     <div className="matrix-demo">
@@ -442,11 +539,36 @@ export function Matrix() {
         ref={canvas}
         role="button"
         tabIndex={0}
-        aria-label={
-          paused ? 'Resume matrix animation' : 'Pause matrix animation'
-        }
+        aria-label="Matrix animation"
+        aria-description="Click to glitch. Press Space to pause."
         aria-pressed={paused}
-        onClick={() => setPaused(!paused)}
+        onPointerMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          Object.assign(pointer.current, {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+            inside: true,
+          });
+        }}
+        onPointerLeave={() => {
+          pointer.current.inside = false;
+        }}
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          glitch.current = {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top,
+            start: -10,
+            pending: true,
+          };
+          setPaused(false);
+          [0, 0.06, 0.13, 0.22].forEach((delay, i) =>
+            window.setTimeout(
+              () => playSound('tick', 1.3 - i * 0.12),
+              delay * 1000,
+            ),
+          );
+        }}
         onKeyDown={(event) => {
           if (event.key === ' ' || event.key === 'Enter') {
             event.preventDefault();
@@ -455,7 +577,9 @@ export function Matrix() {
         }}
       />
       <span className="demo-hint">
-        {paused ? 'Paused · click to resume' : 'Click to pause'}
+        {paused
+          ? 'Paused · press Space to resume'
+          : 'Hover to focus · click to glitch'}
       </span>
     </div>
   );
@@ -474,6 +598,7 @@ export function RotatingGrid() {
     Cols: 40,
   });
   const [glyph, setGlyph] = useState('/');
+  const ink = usePreferences().dark ? '230,230,236' : '35,35,40';
   const pointer = useRef({ x: 0, y: 0, inside: false });
   const swirl = useRef({ x: 0, y: 0, influence: 0, lastTime: 0 });
   const canvas = useCanvas(
@@ -538,7 +663,7 @@ export function RotatingGrid() {
             1 + strength * 0.4,
             (settings.Height / 20) * (1 + strength * 0.4),
           );
-          context.fillStyle = `rgba(35,35,40,${0.3 + strength * 0.65})`;
+          context.fillStyle = `rgba(${ink},${0.3 + strength * 0.65})`;
           context.fillText(glyph, 0, 0);
           context.restore();
         }

@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-test('all 20 demos render with local assets and no page errors or horizontal overflow', async ({
+test('all 19 demos render with local assets and no page errors or horizontal overflow', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -26,7 +26,7 @@ test('all 20 demos render with local assets and no page errors or horizontal ove
     if (message.type() === 'error') errors.push(message.text());
   });
   await page.reload();
-  await expect(page.locator('[data-demo]')).toHaveCount(20);
+  await expect(page.locator('[data-demo]')).toHaveCount(19);
   await expect(page.locator('body')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',
@@ -67,22 +67,37 @@ test('all 20 demos render with local assets and no page errors or horizontal ove
   expect(external).toEqual([]);
 });
 
-test('sound and motion preferences toggle and persist across reloads', async ({
+test('header preferences toggle and persist across reloads', async ({
   page,
 }) => {
+  const night = page.getByRole('button', { name: 'Night mode' });
   const sound = page.getByRole('button', { name: 'Sound effects' });
   const motion = page.getByRole('button', { name: 'Reduce motion' });
+  const spotlight = page.getByRole('button', { name: 'Cursor spotlight' });
+  await expect(night).toHaveAttribute('aria-pressed', 'false');
   await expect(sound).toHaveAttribute('aria-pressed', 'true');
   await expect(motion).toHaveAttribute('aria-pressed', 'false');
+  await expect(spotlight).toHaveAttribute('aria-pressed', 'false');
+  await night.click();
   await sound.click();
   await motion.click();
+  await spotlight.click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
+  await expect(page.locator('.spotlight')).toBeAttached();
   await page.reload();
+  await expect(night).toHaveAttribute('aria-pressed', 'true');
   await expect(sound).toHaveAttribute('aria-pressed', 'false');
   await expect(motion).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
+  await expect(spotlight).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('html')).toHaveCSS(
+    'background-color',
+    'rgb(10, 10, 11)',
+  );
+  await spotlight.click();
+  await expect(page.locator('.spotlight')).toHaveCount(0);
 });
-
 test('animations keep running when the OS asks for reduced motion', async ({
   page,
 }) => {
@@ -289,6 +304,23 @@ test('information sheets reveal the selected stage', async ({ page }) => {
   ).toBeVisible();
 });
 
+test('hovering a back information sheet lifts it', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'Hover is desktop-only');
+  const section = demo(page, 'info-reveal');
+  await section.scrollIntoViewIfNeeded();
+  const sheet = section.getByRole('button', { name: 'Stage 4: Outlining' });
+  await page.waitForTimeout(800);
+  const resting = await sheet.evaluate((element) => element.style.transform);
+  const box = await sheet.boundingBox();
+  if (!box) throw new Error('Information sheet was not rendered');
+  await page.mouse.move(box.x + box.width - 20, box.y + 12);
+  await expect
+    .poll(() => sheet.evaluate((element) => element.style.transform))
+    .not.toBe(resting);
+});
 test('hold-to-delete cancels early, completes a sustained hold, and resets', async ({
   page,
 }) => {
@@ -340,34 +372,47 @@ test('artwork transitions through list, card, and pack layouts', async ({
   await expect(section.getByText('Saved')).toBeVisible();
 });
 
-test('database form validates and creates a local region-specific preview', async ({
-  page,
-}) => {
+test('location dropdown picks a region and moves the map', async ({ page }) => {
   const section = demo(page, 'interactive-location-selector');
-  await section.getByLabel('Project name').fill(' ');
+  const trigger = section.getByRole('combobox', { name: 'Database location' });
+  await trigger.click();
+  await section.getByRole('option', { name: /Singapore/ }).click();
+  await expect(trigger).toContainText('Singapore');
   await expect(
-    section.getByRole('button', { name: 'Create database' }),
-  ).toBeDisabled();
-  await section.getByLabel('Project name').fill('Playground');
-  await section.getByLabel('Database location').selectOption('Singapore');
-  await expect(section.getByRole('img')).toHaveAttribute(
-    'aria-label',
-    'Selected database region: Singapore',
-  );
-  await section.getByRole('button', { name: 'Create database' }).click();
+    section.getByRole('img', { name: /^Selected database region/ }),
+  ).toHaveAttribute('aria-label', 'Selected database region: Singapore');
+  await trigger.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(section.getByRole('listbox')).toBeVisible();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await expect(section.getByRole('listbox')).toHaveCount(0);
   await expect(
-    section.getByText('Playground is ready in Singapore.'),
-  ).toBeVisible();
-  await section.getByRole('button', { name: 'Create another' }).click();
-  await expect(section.getByLabel('Project name')).toHaveValue('CircuitHub');
+    section.getByRole('img', { name: /^Selected database region/ }),
+  ).toHaveAttribute('aria-label', 'Selected database region: Sydney');
+  await trigger.click();
+  await page.keyboard.press('Escape');
+  await expect(trigger).toHaveAttribute('aria-expanded', 'false');
 });
-
-test('selected images send and can be sent again', async ({ page }) => {
+test('selected photographs send and can be sent again', async ({ page }) => {
   const section = demo(page, 'image-send');
   await section.getByRole('button', { name: 'Open image picker' }).click();
   await expect(
     section.getByRole('button', { name: 'Send images' }),
   ).toBeDisabled();
+  await expect
+    .poll(() =>
+      section
+        .locator('.send-tile img')
+        .evaluateAll((images) =>
+          images.every(
+            (image) =>
+              (image as HTMLImageElement).complete &&
+              (image as HTMLImageElement).naturalWidth > 0,
+          ),
+        ),
+    )
+    .toBe(true);
   await section.getByRole('button', { name: 'Select image 1' }).click();
   await section.getByRole('button', { name: 'Select image 3' }).click();
   await section.getByRole('button', { name: 'Send 2 images' }).click();
@@ -381,7 +426,6 @@ test('selected images send and can be sent again', async ({ page }) => {
     section.getByRole('button', { name: 'Open image picker' }),
   ).toBeVisible();
 });
-
 test('transaction queue expands, pauses, finishes, and replays', async ({
   page,
 }) => {
@@ -424,10 +468,10 @@ test('world clocks change format, reorder, change city, add, and remove', async 
     /AM|PM/,
   );
   await section
-    .getByRole('button', { name: 'Move San Francisco clock up' })
+    .getByRole('button', { name: 'Move San Francisco clock earlier' })
     .focus();
   await page.keyboard.press('Enter');
-  await expect(section.locator('.clock-widget').first()).toContainText(
+  await expect(section.locator('.clock-tile').first()).toContainText(
     'San Francisco',
   );
   await section
@@ -439,37 +483,38 @@ test('world clocks change format, reorder, change city, add, and remove', async 
   ).toBeAttached();
   await section.getByRole('button', { name: 'Add clock' }).click();
   await section.getByRole('option', { name: /^Tokyo/ }).click();
-  await expect(section.locator('.clock-widget')).toHaveCount(3);
+  await expect(section.locator('.clock-tile')).toHaveCount(3);
   await section.getByRole('button', { name: 'Remove Kathmandu clock' }).click();
-  await expect(section.locator('.clock-widget')).toHaveCount(2);
+  await expect(section.locator('.clock-tile')).toHaveCount(2);
 });
-
-test('world clocks can be dragged into a new order', async ({ page }) => {
+test('world clock tiles swap when one is dropped on another', async ({
+  page,
+}) => {
   const section = demo(page, 'time-zones');
   await section.scrollIntoViewIfNeeded();
-  await section.locator('.clock-widget').last().hover();
-  const source = await section
+  await section.locator('.clock-tile').last().hover();
+  const handle = await section
     .getByRole('button', { name: 'Drag San Francisco clock' })
     .boundingBox();
-  const target = await section
-    .getByRole('button', { name: 'Drag New York clock' })
-    .boundingBox();
-  if (!source || !target)
-    throw new Error('Clock drag handles were not rendered');
+  const target = await section.locator('.clock-tile').first().boundingBox();
+  if (!handle || !target) throw new Error('Clock tiles were not rendered');
   await page.mouse.move(
-    source.x + source.width / 2,
-    source.y + source.height / 2,
+    handle.x + handle.width / 2,
+    handle.y + handle.height / 2,
   );
   await page.mouse.down();
-  await page.mouse.move(target.x + target.width / 2, target.y - 30, {
-    steps: 15,
-  });
+  await page.mouse.move(
+    target.x + target.width / 2,
+    target.y + target.height / 2,
+    {
+      steps: 15,
+    },
+  );
   await page.mouse.up();
-  await expect(section.locator('.clock-widget').first()).toContainText(
+  await expect(section.locator('.clock-tile').first()).toContainText(
     'San Francisco',
   );
 });
-
 test('Dynamic Island morphs between its modes and collapses', async ({
   page,
 }) => {
@@ -498,55 +543,29 @@ test('Dynamic Island morphs between its modes and collapses', async ({
   ).toBeVisible();
 });
 
-test('info carousel advances on its own and supports manual navigation', async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.reload();
-  const section = demo(page, 'info-carousel');
-  await section.scrollIntoViewIfNeeded();
-  await page.mouse.move(0, 0);
-  const second = section.getByRole('button', {
-    name: 'Show slide 2: Design Inspiration',
-  });
-  await expect(second).toHaveAttribute('aria-pressed', 'true', {
-    timeout: 7000,
-  });
-  await section
-    .getByRole('button', { name: 'Show slide 1: Color Trends' })
-    .click();
-  await expect(section.locator('.info-slide[aria-hidden=false]')).toContainText(
-    'Vibrant Gradients',
-  );
-});
-
-test('Matrix can pause and stops drawing outside the viewport', async ({
+test('Matrix pauses from the keyboard, glitches on click, and stops outside the viewport', async ({
   page,
 }) => {
   const section = demo(page, 'matrix');
   await section.scrollIntoViewIfNeeded();
-  const canvas = section.getByRole('button', {
-    name: 'Pause matrix animation',
-  });
+  const canvas = section.getByRole('button', { name: 'Matrix animation' });
   const running = await canvasData(page, 'matrix');
   await expect.poll(() => canvasData(page, 'matrix')).not.toEqual(running);
-  await canvas.click();
-  await expect(
-    section.getByRole('button', { name: 'Resume matrix animation' }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await canvas.focus();
+  await page.keyboard.press('Space');
+  await expect(canvas).toHaveAttribute('aria-pressed', 'true');
   const paused = await canvasData(page, 'matrix');
   await page.waitForTimeout(200);
   expect(await canvasData(page, 'matrix')).toEqual(paused);
-  await section
-    .getByRole('button', { name: 'Resume matrix animation' })
-    .click();
-  await demo(page, 'ascii-logos').scrollIntoViewIfNeeded();
+  await canvas.click();
+  await expect(canvas).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => canvasData(page, 'matrix')).not.toEqual(paused);
+  await demo(page, 'toolbar').scrollIntoViewIfNeeded();
   await expect(section).toHaveAttribute('data-active', 'false');
   const inactive = await canvasData(page, 'matrix');
   await page.waitForTimeout(200);
   expect(await canvasData(page, 'matrix')).toEqual(inactive);
 });
-
 test('rotating grid geometry and glyph controls change its output', async ({
   page,
 }) => {

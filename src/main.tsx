@@ -1,7 +1,21 @@
-import React from 'react';
+import React, { useEffect, useRef, type ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
-import { motion } from 'motion/react';
-import { Pause, Sparkles, Volume2, VolumeX } from 'lucide-react';
+import {
+  AnimatePresence,
+  motion,
+  useAnimationFrame,
+  useMotionTemplate,
+  useMotionValue,
+} from 'motion/react';
+import {
+  Flashlight,
+  Moon,
+  Pause,
+  Sparkles,
+  Sun,
+  Volume2,
+  VolumeX,
+} from 'lucide-react';
 import { Demo, PreferencesProvider, usePreferences } from './core';
 import { useInterfaceSounds } from './sound';
 import { AsciiLogos, Matrix, RotatingGrid } from './demos/graphics';
@@ -10,7 +24,6 @@ import {
   StackedCards,
   GalleryCarousel,
   ImageGallery,
-  InfoCarousel,
 } from './demos/galleries';
 import {
   Toolbar,
@@ -30,56 +43,143 @@ import { TimeZones, SwitchLayout } from './demos/controls';
 import './styles.css';
 
 const demos = [
-  ['ASCII Logos', AsciiLogos],
-  ['Toolbar', Toolbar],
-  ['Infinite cards', InfiniteCards],
-  ['Stacked cards', StackedCards],
-  ['3D Gallery Carousel', GalleryCarousel],
-  ['Notification Cards', Notifications],
-  ['Agent Cards', Agents],
-  ['Info Reveal', InfoReveal],
-  ['Hold to Delete', HoldToDelete],
-  ['Chat Orb', ChatOrb],
-  ['Switch Layout', SwitchLayout],
-  ['Interactive Location Selector', LocationSelector],
-  ['Image Send', ImageSend],
-  ['Transactions Pending', Transactions],
-  ['Image Gallery', ImageGallery],
-  ['Time Zones', TimeZones],
-  ['Dynamic island', DynamicIsland],
-  ['Info Carousel', InfoCarousel],
   ['Matrix', Matrix],
+  ['3D Gallery Carousel', GalleryCarousel],
+  ['Stacked cards', StackedCards],
+  ['Dynamic island', DynamicIsland],
+  ['Chat Orb', ChatOrb],
+  ['Notification Cards', Notifications],
   ['Rotating Objects in a Grid', RotatingGrid],
+  ['Image Send', ImageSend],
+  ['Infinite cards', InfiniteCards],
+  ['Interactive Location Selector', LocationSelector],
+  ['ASCII Logos', AsciiLogos],
+  ['Switch Layout', SwitchLayout],
+  ['Time Zones', TimeZones],
+  ['Hold to Delete', HoldToDelete],
+  ['Agent Cards', Agents],
+  ['Image Gallery', ImageGallery],
+  ['Info Reveal', InfoReveal],
+  ['Transactions Pending', Transactions],
+  ['Toolbar', Toolbar],
 ] as const;
 
+function HeaderToggle({
+  label,
+  title,
+  pressed,
+  onToggle,
+  icon,
+  text,
+}: {
+  label: string;
+  title: string;
+  pressed: boolean;
+  onToggle: () => void;
+  icon: ReactNode;
+  text: string;
+}) {
+  return (
+    <button
+      type="button"
+      className="header-toggle"
+      aria-label={label}
+      aria-pressed={pressed}
+      title={title}
+      onClick={onToggle}
+    >
+      {icon}
+      <span>{text}</span>
+    </button>
+  );
+}
+
 function HeaderControls() {
-  const { reduced, sound, setReduced, setSound } = usePreferences();
+  const {
+    reduced,
+    sound,
+    dark,
+    spotlight,
+    setReduced,
+    setSound,
+    setDark,
+    setSpotlight,
+  } = usePreferences();
   return (
     <div className="header-controls">
-      <button
-        type="button"
-        className="header-toggle"
-        aria-label="Sound effects"
-        aria-pressed={sound}
+      <HeaderToggle
+        label="Night mode"
+        title={dark ? 'Switch to light mode' : 'Switch to night mode'}
+        pressed={dark}
+        onToggle={() => setDark(!dark)}
+        icon={dark ? <Moon size={14} /> : <Sun size={14} />}
+        text={dark ? 'Night' : 'Day'}
+      />
+      <HeaderToggle
+        label="Sound effects"
         title={sound ? 'Mute sound effects' : 'Turn on sound effects'}
-        onClick={() => setSound(!sound)}
-      >
-        {sound ? <Volume2 size={14} /> : <VolumeX size={14} />}
-        <span>{sound ? 'Sound' : 'Muted'}</span>
-      </button>
-      <button
-        type="button"
-        className="header-toggle"
-        aria-label="Reduce motion"
-        aria-pressed={reduced}
+        pressed={sound}
+        onToggle={() => setSound(!sound)}
+        icon={sound ? <Volume2 size={14} /> : <VolumeX size={14} />}
+        text={sound ? 'Sound' : 'Muted'}
+      />
+      <HeaderToggle
+        label="Reduce motion"
         title={reduced ? 'Turn animations back on' : 'Reduce motion'}
-        onClick={() => setReduced(!reduced)}
-      >
-        {reduced ? <Pause size={14} /> : <Sparkles size={14} />}
-        <span>{reduced ? 'Still' : 'Motion'}</span>
-      </button>
+        pressed={reduced}
+        onToggle={() => setReduced(!reduced)}
+        icon={reduced ? <Pause size={14} /> : <Sparkles size={14} />}
+        text={reduced ? 'Still' : 'Motion'}
+      />
+      <HeaderToggle
+        label="Cursor spotlight"
+        title="Experimental: light the page with your cursor"
+        pressed={spotlight}
+        onToggle={() => setSpotlight(!spotlight)}
+        icon={<Flashlight size={14} />}
+        text="Spotlight"
+      />
     </div>
   );
+}
+
+// Experimental: dims the page and follows the pointer with a soft light.
+function Spotlight() {
+  const x = useMotionValue(innerWidth / 2);
+  const y = useMotionValue(innerHeight / 3);
+  const target = useRef({ x: innerWidth / 2, y: innerHeight / 3 });
+  useEffect(() => {
+    const onMove = (event: PointerEvent) => {
+      target.current = { x: event.clientX, y: event.clientY };
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerdown', onMove);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerdown', onMove);
+    };
+  }, []);
+  useAnimationFrame((_, delta) => {
+    const follow = 1 - Math.exp(-delta / 90);
+    x.set(x.get() + (target.current.x - x.get()) * follow);
+    y.set(y.get() + (target.current.y - y.get()) * follow);
+  });
+  const background = useMotionTemplate`radial-gradient(circle 260px at ${x}px ${y}px, transparent 0%, transparent 35%, var(--spotlight-dim) 100%)`;
+  return (
+    <motion.div
+      className="spotlight"
+      aria-hidden="true"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      style={{ background }}
+    />
+  );
+}
+
+function SpotlightLayer() {
+  const { spotlight } = usePreferences();
+  return <AnimatePresence>{spotlight && <Spotlight />}</AnimatePresence>;
 }
 
 function App() {
@@ -87,6 +187,7 @@ function App() {
   return (
     <PreferencesProvider>
       <div className="page-guides" aria-hidden="true" />
+      <SpotlightLayer />
       <main>
         <motion.header
           className="page-header"
