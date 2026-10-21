@@ -1,55 +1,40 @@
 # Interface Explorations
 
-A local, white-themed take on the interactive playground on [Abil Shrestha's website](https://www.abilshr.com/). Nineteen demos are included, ordered from most to least elaborate. The portfolio introduction, project listings, and writing pages are intentionally omitted.
+A React, TypeScript, and Motion playground with nineteen interactive UI demos,
+inspired by [Abil Shrestha's website](https://www.abilshr.com/). Includes animated
+cards, galleries, controls, and graphics with light and dark themes.
 
 ## Run locally
 
-Requires Node.js 20.19+ or 22.12+ and npm.
+Use Node.js 22.12+ and npm. From the project root:
 
 ```sh
 npm ci
 npm run dev
 ```
 
-Open the Local URL printed by Vite. The development server uses **5174**, one above Vite's default, and exits if that port is occupied. Use `npm run dev -- --port 5175` if needed, incrementing until an available port is found.
+Open the URL Vite prints. The server starts at port 5174 and
+moves to the next free port if it is occupied.
 
-## Checks
+## Useful commands
 
-```sh
-npm run typecheck
-npm run build
-npm run format:check
-```
+- `npm run typecheck`: check TypeScript.
+- `npm run build`: type-check and build into `dist/`.
+- `npm run format:check`: check formatting.
+- `PW_HEADLESS=true npm test`: run desktop and mobile browser tests;
+  install Chromium first with `npx playwright install chromium`.
 
-The browser suite exercises the demos at desktop (1440 × 1000) and mobile (390 × 844) sizes. It covers keyboard navigation, dragging, wheel browsing, hover lifts, autoplay, hold cancellation and completion, simulated transactions, local assets, and the header preferences.
+## How it works
 
-```sh
-npx playwright install chromium
-PW_HEADLESS=true npm test
-```
+- `src/demos/`: demo components grouped by behavior.
+- `src/core.tsx`: shared controls, preferences, autoplay, and viewport activity.
+- `src/styles.css`: themes and responsive styles; `src/sound.ts`: synthesized sounds.
+- `public/`: local fonts, images, and asset provenance.
 
-Tests start a server on port 5174 when one is not already running. For another available port, use `PW_PORT=5175 PW_HEADLESS=true npm test`. Playwright stops servers it starts; stop a manually started Vite server with Ctrl+C.
+Transactions, calls, music, and other services are visual simulations. The
+voice orb doesn't record audio; music previews are silent. Demo state resets
+on reload; header preferences are remembered.
 
-## Implementation
-
-- React, TypeScript, Vite, Motion, and Lucide icons.
-- Shared viewport activity, autoplay, preferences, and controls live in `src/core.tsx`. UI sound effects are synthesized with the Web Audio API in `src/sound.ts`, with no audio files.
-- Demo components are grouped by behavior under `src/demos/`. Styles, responsive rules, and light-theme colors are in `src/styles.css`.
-- Canvas animation frames, observers, intervals, and action timers are cleaned up. Continuous animations pause outside the viewport.
-- Motion runs by default, even when the operating system asks for reduced motion, because the page is a motion study. The header has four remembered toggles:
-  - **Day/Night** switches between the light and dark themes. Colors are CSS tokens in `src/styles.css`, and canvases switch their ink to match.
-  - **Sound** mutes the hover and click ticks.
-  - **Motion** freezes decorative loops while keeping manual controls and live clocks working.
-  - **Spotlight** is experimental. It dims the page and follows the cursor with a soft light.
-- Browsers block audio until the first click, tap, or keypress on the page, so hover ticks start after that.
-- Every image and font is served locally. The app makes no requests to third-party services during use.
-
-## Fidelity and assets
-
-The supplied HAR, screenshot, live light theme, and desktop/mobile browser captures were used as references. Seven fonts were recovered from the HAR, and 20 images were retrieved from publicly accessible assets used by the original site. Source URLs are recorded in `public/asset-sources.json`; the HAR itself and its request headers are not included.
-
-The original logo videos returned HTTP 403 responses. **ASCII Logos uses procedural, animated logo studies instead of video frames.** The 3D gallery reuses locally recovered photographs. Its geometry, the stacked cards, the dotted world map (hand-simplified coastlines in `src/demos/worldMap.ts`), the chat orb, and other motion details are reconstructed or original approximations. This is a functional visual study, not a pixel-exact source recovery.
-
-All demo state lives in memory and resets on reload. Database creation, image delivery, transactions, calls, upgrades, and music playback are visual simulations. The voice orb does not record audio, and the music preview is silent.
-
-The original design, fonts, and photographs retain their respective creators' rights. Asset provenance is preserved for reference; this project does not grant additional redistribution rights.
+See [implementation notes](docs/implementation.md) for animation behavior,
+browser checks, and asset sources. The original design, fonts, and photographs
+retain their creators' rights; no additional redistribution rights are granted.
