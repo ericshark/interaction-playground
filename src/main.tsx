@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Demo, PreferencesProvider, usePreferences } from './core';
 import { useInterfaceSounds } from './sound';
+import { SoundLab } from './SoundLab';
 import { AsciiLogos, Matrix, RotatingGrid } from './demos/graphics';
 import {
   InfiniteCards,
@@ -188,6 +189,7 @@ function App() {
     <PreferencesProvider>
       <div className="page-guides" aria-hidden="true" />
       <SpotlightLayer />
+      <SoundLab />
       <main>
         <motion.header
           className="page-header"

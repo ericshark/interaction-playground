@@ -14,7 +14,37 @@ const pressedIndex = (cards: Locator) =>
   );
 
 test.beforeEach(async ({ page }) => {
+  // The floating sound lab is hidden so it cannot cover demo controls, except
+  // in the test that opts back in.
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('show-sound-lab'))
+      localStorage.setItem('playground:sound-lab', 'hidden');
+  });
   await page.goto('/');
+});
+
+test('sound lab selects a pack, remembers it, and collapses', async ({
+  page,
+}) => {
+  await page.evaluate(() => {
+    sessionStorage.setItem('show-sound-lab', 'true');
+    localStorage.removeItem('playground:sound-lab');
+  });
+  await page.reload();
+  const lab = page.getByRole('complementary', { name: 'Sound lab' });
+  const trackpad = lab.getByRole('button', { name: 'Trackpad', exact: true });
+  await expect(
+    lab.getByRole('button', { name: 'Blip', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await trackpad.click();
+  await expect(trackpad).toHaveAttribute('aria-pressed', 'true');
+  await expect(lab).toContainText('Force Touch');
+  await lab.getByRole('button', { name: 'Success' }).click();
+  await page.reload();
+  await expect(trackpad).toHaveAttribute('aria-pressed', 'true');
+  await lab.getByRole('button', { name: /Sound lab/ }).click();
+  await expect(trackpad).toHaveCount(0);
+  await expect(lab).toContainText('Trackpad');
 });
 
 test('all 19 demos render with local assets and no page errors or horizontal overflow', async ({
