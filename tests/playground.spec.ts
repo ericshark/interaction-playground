@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const demo = (page: Page, name: string) =>
   page.locator(`[data-demo="${name}"]`);
@@ -6,12 +6,18 @@ const canvasData = (page: Page, name: string) =>
   demo(page, name)
     .locator('canvas')
     .evaluate((canvas: HTMLCanvasElement) => canvas.toDataURL());
+const pressedIndex = (cards: Locator) =>
+  cards.evaluateAll((elements) =>
+    elements.findIndex(
+      (element) => element.getAttribute('aria-pressed') === 'true',
+    ),
+  );
 
 test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-test('all 25 demos render with local assets and no page errors or horizontal overflow', async ({
+test('all 20 demos render with local assets and no page errors or horizontal overflow', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -20,7 +26,7 @@ test('all 25 demos render with local assets and no page errors or horizontal ove
     if (message.type() === 'error') errors.push(message.text());
   });
   await page.reload();
-  await expect(page.locator('[data-demo]')).toHaveCount(25);
+  await expect(page.locator('[data-demo]')).toHaveCount(20);
   await expect(page.locator('body')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',
@@ -59,6 +65,50 @@ test('all 25 demos render with local assets and no page errors or horizontal ove
       .map((entry) => entry.name),
   );
   expect(external).toEqual([]);
+});
+
+test('sound and motion preferences toggle and persist across reloads', async ({
+  page,
+}) => {
+  const sound = page.getByRole('button', { name: 'Sound effects' });
+  const motion = page.getByRole('button', { name: 'Reduce motion' });
+  await expect(sound).toHaveAttribute('aria-pressed', 'true');
+  await expect(motion).toHaveAttribute('aria-pressed', 'false');
+  await sound.click();
+  await motion.click();
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
+  await page.reload();
+  await expect(sound).toHaveAttribute('aria-pressed', 'false');
+  await expect(motion).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
+});
+
+test('animations keep running when the OS asks for reduced motion', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  const section = demo(page, 'ascii-logos');
+  await section.scrollIntoViewIfNeeded();
+  await expect(section).toHaveAttribute('data-active', 'true');
+  const initial = await canvasData(page, 'ascii-logos');
+  await expect
+    .poll(() => canvasData(page, 'ascii-logos'), { timeout: 3000 })
+    .not.toEqual(initial);
+});
+
+test('the Reduce motion toggle freezes loops while manual canvas controls still redraw', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Reduce motion' }).click();
+  const section = demo(page, 'ascii-logos');
+  await section.scrollIntoViewIfNeeded();
+  await expect(section).toHaveAttribute('data-active', 'true');
+  const initial = await canvasData(page, 'ascii-logos');
+  await page.waitForTimeout(200);
+  expect(await canvasData(page, 'ascii-logos')).toEqual(initial);
+  await section.getByRole('button', { name: 'Next logo' }).click();
+  expect(await canvasData(page, 'ascii-logos')).not.toEqual(initial);
 });
 
 test('ASCII logo navigation changes the drawing and wraps in both directions', async ({
@@ -101,14 +151,37 @@ test('toolbar modes expand and demonstrate analytics, errors, and a local upgrad
 
 test('infinite photographs advance and reverse', async ({ page }) => {
   const section = demo(page, 'infinite-cards');
+  const counter = section.locator('.gallery-navigation .rolling');
   await section
     .getByRole('button', { name: 'Next stacked photograph', exact: true })
     .click();
-  await expect(section.getByText('02 / 05')).toBeVisible();
+  await expect(counter).toHaveText('02 / 05');
   await section
     .getByRole('button', { name: 'Previous stacked photograph', exact: true })
     .click();
-  await expect(section.getByText('01 / 05')).toBeVisible();
+  await expect(counter).toHaveText('01 / 05');
+});
+
+test('one wheel notch over the infinite stack moves exactly one photograph without scrolling the page', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'Wheel input is desktop-only');
+  const section = demo(page, 'infinite-cards');
+  const counter = section.locator('.gallery-navigation .rolling');
+  await section.scrollIntoViewIfNeeded();
+  await section.locator('.infinite-stack').hover();
+  await expect(counter).toHaveText('01 / 05');
+  const scrollY = await page.evaluate(() => scrollY);
+  await page.mouse.wheel(0, 120);
+  await page.mouse.wheel(0, 120);
+  await expect(counter).toHaveText('02 / 05');
+  await page.waitForTimeout(500);
+  await expect(counter).toHaveText('02 / 05');
+  expect(await page.evaluate(() => scrollY)).toBe(scrollY);
+  await page.waitForTimeout(200);
+  await page.mouse.wheel(0, -120);
+  await expect(counter).toHaveText('01 / 05');
 });
 
 test('spatial cards can be brought forward with the keyboard', async ({
@@ -122,14 +195,33 @@ test('spatial cards can be brought forward with the keyboard', async ({
   await expect(button).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('3D gallery changes its focused image', async ({ page }) => {
+test('3D gallery rotates on its own, even with OS reduced motion', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
   const section = demo(page, '3d-gallery-carousel');
-  await section
-    .getByRole('button', { name: 'Next gallery image', exact: true })
-    .click();
-  await expect(
-    section.getByRole('button', { name: 'View gallery photograph 2' }),
-  ).toHaveAttribute('aria-pressed', 'true');
+  await section.scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
+  const cards = section.locator('.ring-card');
+  const start = await pressedIndex(cards);
+  await expect
+    .poll(() => pressedIndex(cards), { timeout: 9000 })
+    .not.toBe(start);
+});
+
+test('3D gallery steps to the next image', async ({ page }) => {
+  const section = demo(page, '3d-gallery-carousel');
+  const cards = section.locator('.ring-card');
+  const next = section.getByRole('button', {
+    name: 'Next gallery image',
+    exact: true,
+  });
+  await next.click();
+  await page.waitForTimeout(1200);
+  const current = await pressedIndex(cards);
+  await next.click();
+  await expect.poll(() => pressedIndex(cards)).toBe((current + 1) % 8);
 });
 
 test('notifications support selection and repeated replay', async ({
@@ -148,6 +240,29 @@ test('notifications support selection and repeated replay', async ({
       section.getByRole('button', { name: 'Inspect Cancelled notification' }),
     ).toHaveAttribute('aria-pressed', 'true');
   }
+});
+
+test('hovering a notification lifts it and clicking brings it forward', async ({
+  page,
+  isMobile,
+}) => {
+  test.skip(isMobile, 'Hover is desktop-only');
+  const section = demo(page, 'notification-cards');
+  await section.scrollIntoViewIfNeeded();
+  const card = section.getByRole('button', {
+    name: 'Inspect Deployed notification',
+  });
+  await page.waitForTimeout(1500);
+  const resting = await card.evaluate((element) => element.style.transform);
+  const box = await card.boundingBox();
+  if (!box) throw new Error('Notification card was not rendered');
+  await page.mouse.move(box.x + box.width / 2, box.y + 30);
+  await expect
+    .poll(() => card.evaluate((element) => element.style.transform))
+    .not.toBe(resting);
+  await page.mouse.down();
+  await page.mouse.up();
+  await expect(card).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('agent cards select and replay', async ({ page }) => {
@@ -195,11 +310,16 @@ test('hold-to-delete cancels early, completes a sustained hold, and resets', asy
 
 test('voice orb switches provider and listening state', async ({ page }) => {
   const section = demo(page, 'chat-orb');
-  await section.getByLabel('Voice provider').selectOption('Claude');
+  const claude = section
+    .getByRole('group', { name: 'Voice provider' })
+    .getByRole('button', { name: 'Claude' });
+  await claude.click();
+  await expect(claude).toHaveAttribute('aria-pressed', 'true');
   await section.getByRole('button', { name: 'Start voice preview' }).click();
   await expect(
     section.getByRole('button', { name: 'Stop listening' }),
   ).toHaveAttribute('aria-pressed', 'true');
+  await expect(section.getByRole('status')).toContainText('Listening');
 });
 
 test('artwork transitions through list, card, and pack layouts', async ({
@@ -245,13 +365,20 @@ test('database form validates and creates a local region-specific preview', asyn
 test('selected images send and can be sent again', async ({ page }) => {
   const section = demo(page, 'image-send');
   await section.getByRole('button', { name: 'Open image picker' }).click();
+  await expect(
+    section.getByRole('button', { name: 'Send images' }),
+  ).toBeDisabled();
   await section.getByRole('button', { name: 'Select image 1' }).click();
   await section.getByRole('button', { name: 'Select image 3' }).click();
   await section.getByRole('button', { name: 'Send 2 images' }).click();
-  await expect(section.getByText('Delivered.')).toBeVisible();
+  await expect(section.getByText('Delivered.')).toBeVisible({ timeout: 4000 });
   await section.getByRole('button', { name: 'Send more images' }).click();
   await expect(
     section.getByRole('button', { name: 'Select image 1' }),
+  ).toHaveAttribute('aria-pressed', 'false');
+  await page.keyboard.press('Escape');
+  await expect(
+    section.getByRole('button', { name: 'Open image picker' }),
   ).toBeVisible();
 });
 
@@ -288,37 +415,39 @@ test('floral gallery expands a photograph and dismisses with Escape', async ({
   ).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('time-zone widgets change format, reorder, edit, add, and remove', async ({
+test('world clocks change format, reorder, change city, add, and remove', async ({
   page,
 }) => {
   const section = demo(page, 'time-zones');
   await section.getByRole('button', { name: '24', exact: true }).click();
-  await expect(section.locator('.clock-timeline').first()).not.toContainText(
+  await expect(section.locator('.clock-time').first()).not.toContainText(
     /AM|PM/,
   );
   await section
-    .getByRole('button', { name: 'Move San Francisco clock left' })
+    .getByRole('button', { name: 'Move San Francisco clock up' })
     .focus();
   await page.keyboard.press('Enter');
   await expect(section.locator('.clock-widget').first()).toContainText(
     'San Francisco',
   );
   await section
-    .getByRole('button', { name: 'Edit San Francisco clock' })
+    .getByRole('button', { name: 'Change San Francisco city' })
     .click();
-  await section.getByLabel('Clock city').selectOption('5');
+  await section.getByRole('option', { name: /^Kathmandu/ }).click();
   await expect(
-    section.getByRole('button', { name: 'Edit Kathmandu clock' }),
-  ).toBeVisible();
-  await section.getByRole('button', { name: 'Add clock widget' }).click();
+    section.getByRole('button', { name: 'Change Kathmandu city' }),
+  ).toBeAttached();
+  await section.getByRole('button', { name: 'Add clock' }).click();
+  await section.getByRole('option', { name: /^Tokyo/ }).click();
   await expect(section.locator('.clock-widget')).toHaveCount(3);
   await section.getByRole('button', { name: 'Remove Kathmandu clock' }).click();
   await expect(section.locator('.clock-widget')).toHaveCount(2);
 });
 
-test('time-zone widgets can be dragged into a new order', async ({ page }) => {
+test('world clocks can be dragged into a new order', async ({ page }) => {
   const section = demo(page, 'time-zones');
   await section.scrollIntoViewIfNeeded();
+  await section.locator('.clock-widget').last().hover();
   const source = await section
     .getByRole('button', { name: 'Drag San Francisco clock' })
     .boundingBox();
@@ -332,14 +461,18 @@ test('time-zone widgets can be dragged into a new order', async ({ page }) => {
     source.y + source.height / 2,
   );
   await page.mouse.down();
-  await page.mouse.move(target.x, target.y, { steps: 15 });
+  await page.mouse.move(target.x + target.width / 2, target.y - 30, {
+    steps: 15,
+  });
   await page.mouse.up();
   await expect(section.locator('.clock-widget').first()).toContainText(
     'San Francisco',
   );
 });
 
-test('Dynamic Island morphs between its four modes', async ({ page }) => {
+test('Dynamic Island morphs between its modes and collapses', async ({
+  page,
+}) => {
   const section = demo(page, 'dynamic-island');
   await section.getByRole('button', { name: 'Music', exact: true }).click();
   await expect(section.getByText('Saku', { exact: true })).toBeVisible();
@@ -351,109 +484,39 @@ test('Dynamic Island morphs between its four modes', async ({ page }) => {
   await expect(section.getByText('00:01')).toBeVisible();
   await section.getByRole('button', { name: 'End call' }).click();
   await expect(section.getByText('Call ended')).toBeVisible();
+  await section.getByRole('button', { name: 'Collapse Call activity' }).click();
+  await expect(
+    section.getByRole('button', { name: 'Expand Call activity' }),
+  ).toHaveAttribute('aria-expanded', 'false');
+  await section.getByRole('button', { name: 'Timer', exact: true }).click();
+  await expect(section.getByText(/^0[45]:\d\d$/)).toBeVisible();
   await section.getByRole('button', { name: 'Calendar', exact: true }).click();
   await expect(section.getByText('Make something good.')).toBeVisible();
-  await section.getByRole('button', { name: 'Default', exact: true }).click();
-  await expect(section.getByText('Explore', { exact: true })).toBeVisible();
+  await section.getByRole('button', { name: 'Idle', exact: true }).click();
+  await expect(
+    section.getByRole('button', { name: 'Dynamic Island' }),
+  ).toBeVisible();
 });
 
-test('logo paths and loading characters animate', async ({ page }) => {
-  const logo = demo(page, 'slightly-animated-v0-logo');
-  await logo.scrollIntoViewIfNeeded();
-  await expect(logo.getByRole('img')).toBeVisible();
-  await expect(logo.locator('.logo-tracer')).toHaveCSS(
-    'animation-name',
-    'trace',
-  );
-  const loading = demo(page, 'loading-text');
-  await loading.scrollIntoViewIfNeeded();
-  await expect(loading.getByRole('status')).toHaveAttribute(
-    'aria-label',
-    'Scanning web for insights',
-  );
-  await expect(loading.getByRole('status')).toHaveAttribute(
-    'aria-label',
-    'Thinking through the details',
-    { timeout: 7000 },
-  );
-});
-
-test('search filters commands, supports keyboard selection, and Escape dismissal', async ({
+test('info carousel advances on its own and supports manual navigation', async ({
   page,
 }) => {
-  const section = demo(page, 'slim-dropdown');
-  await section.getByRole('button', { name: 'Search', exact: true }).click();
-  await section.getByRole('combobox').fill('settings');
-  await expect(section.getByRole('option')).toHaveCount(1);
-  await section.getByRole('combobox').press('Enter');
-  await expect(section.getByRole('status')).toHaveText('Settings');
-  await section.getByRole('button', { name: 'Search', exact: true }).click();
-  await section.getByRole('combobox').fill('no results for this');
-  await expect(
-    section.getByText('No matches. Try another search.'),
-  ).toBeVisible();
-  await section.getByRole('combobox').press('Escape');
-  await expect(section.getByRole('listbox')).toHaveCount(0);
-});
-
-test('category filters can be selected, removed, and dismissed', async ({
-  page,
-}) => {
-  const section = demo(page, 'filter-dropdown');
-  await section.getByRole('button', { name: 'Design', exact: true }).click();
-  await expect(
-    section.getByRole('button', { name: 'Remove Design filter' }),
-  ).toBeVisible();
-  await section.getByRole('button', { name: 'Remove Design filter' }).click();
-  await expect(
-    section.getByRole('button', { name: 'Design', exact: true }),
-  ).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(
-    section.getByRole('button', { name: 'Select filter' }),
-  ).toHaveAttribute('aria-expanded', 'false');
-});
-
-test('expanded search menu stays inside its demo section', async ({ page }) => {
-  const section = demo(page, 'slim-dropdown');
-  await section.getByRole('button', { name: 'Search', exact: true }).click();
-  await expect
-    .poll(async () => {
-      const bounds = await section.boundingBox();
-      const menu = await section.getByRole('listbox').boundingBox();
-      return Boolean(
-        bounds &&
-        menu &&
-        menu.y >= bounds.y &&
-        menu.y + menu.height <= bounds.y + bounds.height,
-      );
-    })
-    .toBe(true);
-});
-
-test('calendar expands and tracks completed tasks', async ({ page }) => {
-  const section = demo(page, 'calendar-block');
-  await section.getByRole('button', { name: /Today's Tasks/ }).click();
-  await section
-    .getByRole('checkbox', { name: 'Explore a new direction' })
-    .check();
-  await expect(
-    section.getByRole('button', { name: /Today's Tasks/ }),
-  ).toContainText('3 tasks');
-  await page.keyboard.press('Escape');
-  await expect(section.getByRole('checkbox')).toHaveCount(0);
-});
-
-test('info carousel supports manual navigation', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
   const section = demo(page, 'info-carousel');
+  await section.scrollIntoViewIfNeeded();
+  await page.mouse.move(0, 0);
+  const second = section.getByRole('button', {
+    name: 'Show slide 2: Design Inspiration',
+  });
+  await expect(second).toHaveAttribute('aria-pressed', 'true', {
+    timeout: 7000,
+  });
   await section
-    .getByRole('button', { name: 'Show slide 2: Design Inspiration' })
+    .getByRole('button', { name: 'Show slide 1: Color Trends' })
     .click();
-  await expect(
-    section.getByRole('button', { name: 'Show slide 2: Design Inspiration' }),
-  ).toHaveAttribute('aria-pressed', 'true');
   await expect(section.locator('.info-slide[aria-hidden=false]')).toContainText(
-    'Soothing Pastels',
+    'Vibrant Gradients',
   );
 });
 
@@ -465,6 +528,8 @@ test('Matrix can pause and stops drawing outside the viewport', async ({
   const canvas = section.getByRole('button', {
     name: 'Pause matrix animation',
   });
+  const running = await canvasData(page, 'matrix');
+  await expect.poll(() => canvasData(page, 'matrix')).not.toEqual(running);
   await canvas.click();
   await expect(
     section.getByRole('button', { name: 'Resume matrix animation' }),
@@ -496,26 +561,5 @@ test('rotating grid geometry and glyph controls change its output', async ({
   await expect(section.locator('canvas')).toHaveAttribute(
     'aria-label',
     'Rotating grid of ☆ symbols, 20 rows and 24 columns',
-  );
-});
-
-test('reduced motion freezes loops while manual canvas controls still redraw', async ({
-  page,
-}) => {
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.reload();
-  const section = demo(page, 'ascii-logos');
-  await section.scrollIntoViewIfNeeded();
-  await expect(section).toHaveAttribute('data-active', 'true');
-  const initial = await canvasData(page, 'ascii-logos');
-  await page.waitForTimeout(200);
-  expect(await canvasData(page, 'ascii-logos')).toEqual(initial);
-  await section.getByRole('button', { name: 'Next logo' }).click();
-  expect(await canvasData(page, 'ascii-logos')).not.toEqual(initial);
-  const logo = demo(page, 'slightly-animated-v0-logo');
-  await logo.scrollIntoViewIfNeeded();
-  await expect(logo.locator('.logo-tracer')).toHaveCSS(
-    'animation-name',
-    'none',
   );
 });

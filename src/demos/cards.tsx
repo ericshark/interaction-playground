@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity,
   ArrowUpRight,
+  Ban,
   Check,
   CircleCheck,
   CircleX,
@@ -14,6 +15,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Choices, Replay, spring, useActivity } from '../core';
+import { playSound } from '../sound';
 
 export function Toolbar() {
   const [tab, setTab] = useState('Commit');
@@ -175,54 +177,89 @@ const notices = [
     description: 'Waiting for available build resources to start…',
     time: '25 minutes ago',
     Icon: Clock3,
-    color: 'muted',
+    color: 'violet',
   },
   {
     title: 'Cancelled',
     description: 'Deployment was cancelled by user request…',
     time: '1 hour ago',
-    Icon: CircleX,
+    Icon: Ban,
     color: 'muted',
   },
 ];
 export function Notifications() {
   const [replay, setReplay] = useState(0);
   const [selected, setSelected] = useState(5);
+  const [entering, setEntering] = useState(true);
   const { active } = useActivity();
+  useEffect(() => {
+    if (!active) {
+      setEntering(true);
+      return;
+    }
+    const timer = window.setTimeout(() => setEntering(false), 1100);
+    return () => window.clearTimeout(timer);
+  }, [active, replay]);
+  const lift = { type: 'spring' as const, stiffness: 380, damping: 28 };
   return (
     <div className="notification-demo">
       <Replay
         onClick={() => {
           setReplay(replay + 1);
           setSelected(5);
+          setEntering(true);
         }}
       />
       <div className="notification-stack" key={replay}>
         {notices.map(({ title, description, time, Icon, color }, i) => {
           const depth = (selected - i + notices.length) % notices.length;
+          const rest = { x: -depth * 26, y: -depth * 33, rotate: -7 };
           return (
             <motion.button
               key={title}
               className="notification-card"
               aria-label={`Inspect ${title} notification`}
               aria-pressed={selected === i}
-              initial={{ opacity: 0, y: 110, rotate: -8 }}
+              initial={{ opacity: 0, y: 140, x: 0, rotate: -7 }}
               animate={
                 active
-                  ? {
-                      opacity: 1 - depth * 0.12,
-                      x: -depth * 16,
-                      y: -depth * 22,
-                      rotate: -8,
-                    }
-                  : { opacity: 0, y: 110, rotate: -8 }
+                  ? { ...rest, opacity: 1, scale: 1 }
+                  : { opacity: 0, y: 140, rotate: -7 }
               }
-              transition={{ ...spring, delay: i * 0.09 }}
-              style={{ zIndex: 10 - depth }}
-              onClick={() => setSelected(i)}
+              whileHover={{
+                ...rest,
+                y: rest.y - 30,
+                scale: 1.015,
+                transition: lift,
+              }}
+              whileFocus={{
+                ...rest,
+                y: rest.y - 30,
+                scale: 1.015,
+                transition: lift,
+              }}
+              whileTap={{ scale: 0.985, transition: lift }}
+              transition={{
+                type: 'spring',
+                stiffness: 300,
+                damping: 26,
+                delay: entering ? (notices.length - 1 - i) * 0.07 : 0,
+              }}
+              style={
+                {
+                  zIndex: 10 - depth,
+                  '--depth': depth,
+                } as CSSProperties
+              }
+              onClick={() => {
+                if (selected !== i) playSound('pop');
+                setSelected(i);
+              }}
             >
               <strong>
-                <Icon size={14} className={color} />
+                <span className={`notice-badge ${color}`}>
+                  <Icon size={12} strokeWidth={2.4} />
+                </span>
                 {title}
               </strong>
               <p>{description}</p>
@@ -231,6 +268,9 @@ export function Notifications() {
           );
         })}
       </div>
+      <p className="demo-hint notification-hint">
+        Hover to lift a card, click to bring it forward
+      </p>
     </div>
   );
 }
@@ -394,10 +434,16 @@ export function HoldToDelete() {
       return;
     }
     const start = performance.now();
+    let notch = 0;
     const tick = (time: number) => {
       const value = Math.min((time - start) / 1100, 1);
       setProgress(value);
+      if (value >= (notch + 1) / 6 && value < 1) {
+        notch++;
+        playSound('tick', 0.7 + notch * 0.12);
+      }
       if (value === 1) {
+        playSound('delete');
         setTracks((current) => current.filter((track) => track.id !== holding));
         setMessage(
           `${songs.find((track) => track.id === holding)?.name} removed`,
