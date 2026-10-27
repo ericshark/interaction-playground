@@ -20,6 +20,7 @@ import {
 import { LocationSelector, ImageSend, DynamicIsland } from './demos/widgets';
 import { TimeZones, SwitchLayout } from './demos/controls';
 import './styles.css';
+import JellyfishBackground from './components/JellyfishBackground';
 
 const groups = [
   {
@@ -226,6 +227,7 @@ function App() {
   return (
     <PreferencesProvider>
       <div className="page-guides" aria-hidden="true" />
+      <JellyfishBackground />
       <main>
         <motion.header
           className="page-header"

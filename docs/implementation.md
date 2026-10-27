@@ -27,6 +27,23 @@ Tests start their own server on port 5199 with `--strictPort` and never reuse an
 - Browsers block audio until the first click, tap, or keypress on the page, so hover ticks start after that.
 - Every image and font is served locally. The app makes no requests to third-party services during use.
 
+## Jellyfish background
+
+Three procedural ASCII jellyfish follow the curved paths from the portfolio's
+`codex/shark-background` animation. Their bells pulse and their tentacles sway
+as they cross behind the opaque content column, appearing only in the margins.
+The fixed canvas sits above the page guides, ignores pointer input, and follows
+the existing Day/Night preference with grayscale palettes.
+
+Drawing is limited to 30 FPS with a maximum 2× pixel density. Below 1024px,
+the canvas is hidden and its backing store is released. Hidden tabs suspend
+animation and resume without advancing through the hidden time. Frames and
+listeners are cleaned up on unmount, including React Strict Mode remounts.
+No canvas context leaves the content usable without the decoration.
+
+The browser suite checks animation, theme changes, center-column occlusion,
+responsive activation, density limits, and canvas fallback behavior.
+
 ## Graphics and assets
 
 Fonts and images are served from `public/`. Asset source URLs are recorded in [public/asset-sources.json](../public/asset-sources.json).
