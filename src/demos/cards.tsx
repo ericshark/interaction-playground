@@ -439,7 +439,7 @@ export function HoldToDelete() {
     }
     const start = performance.now();
     const tick = (time: number) => {
-      const value = Math.min((time - start) / 1100, 1);
+      const value = Math.min((time - start) / 750, 1);
       setProgress(value);
       if (value === 1) {
         playSound('delete');

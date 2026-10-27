@@ -433,6 +433,9 @@ export function StackedCards() {
               >
                 <span className="spatial-face">
                   <SpatialCardContent index={i} />
+                  <span className="spatial-label" aria-hidden="true">
+                    {stackNames[i]}
+                  </span>
                 </span>
               </motion.button>
             );

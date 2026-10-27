@@ -938,7 +938,27 @@ const islandSizes: Record<
   Calendar: { compact: [196, 34], expanded: [300, 112] },
 };
 const timerLength = 300;
-const songLength = 346;
+const islandTracks = [
+  {
+    title: 'After Hours',
+    artist: 'Northline',
+    duration: 214,
+    artwork: '/images/photo-1.jpg',
+  },
+  {
+    title: 'Coast to Coast',
+    artist: 'Daylight Club',
+    duration: 238,
+    artwork: '/images/photo-3.jpg',
+  },
+  {
+    title: 'First Light',
+    artist: 'Quiet Current',
+    duration: 196,
+    artwork: '/images/photo-5.jpg',
+  },
+] as const;
+type IslandTrack = (typeof islandTracks)[number];
 const clock = (seconds: number) =>
   `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
 
@@ -959,6 +979,7 @@ function IslandContent({
   callEnded,
   playing,
   song,
+  track,
   timer,
   timerRunning,
   actions,
@@ -969,12 +990,13 @@ function IslandContent({
   callEnded: boolean;
   playing: boolean;
   song: number;
+  track: IslandTrack;
   timer: number;
   timerRunning: boolean;
   actions: {
     endCall: () => void;
     togglePlay: () => void;
-    skip: () => void;
+    skip: (direction: number) => void;
     toggleTimer: () => void;
     cancelTimer: () => void;
   };
@@ -994,10 +1016,10 @@ function IslandContent({
       );
     return (
       <>
-        <span className="caller-avatar">A</span>
+        <span className="caller-avatar">E</span>
         <div className="island-copy">
           <span>{callEnded ? 'Call ended' : 'Mobile'}</span>
-          <strong>{callEnded ? 'Talk soon.' : 'Abil'}</strong>
+          <strong>{callEnded ? 'Talk soon.' : 'Eric'}</strong>
         </div>
         {!callEnded && (
           <>
@@ -1019,7 +1041,11 @@ function IslandContent({
     if (compact)
       return (
         <>
-          <img className="island-album small" src="/images/saku.jpg" alt="" />
+          <img
+            className="island-album small"
+            src={track.artwork}
+            alt={`${track.title} by ${track.artist}`}
+          />
           <Waveform bars={4} color="#e6c48a" />
         </>
       );
@@ -1028,12 +1054,12 @@ function IslandContent({
         <div className="island-music-top">
           <img
             className="island-album"
-            src="/images/saku.jpg"
-            alt="Saku album artwork"
+            src={track.artwork}
+            alt={`${track.title} album artwork`}
           />
           <div className="island-copy">
-            <strong>Saku</strong>
-            <span>Susumu Yokota</span>
+            <strong>{track.title}</strong>
+            <span>{track.artist}</span>
           </div>
           <span
             className={`music-bars ${playing ? 'playing' : ''}`}
@@ -1048,14 +1074,14 @@ function IslandContent({
           <span>{clock(song)}</span>
           <div>
             <motion.i
-              animate={{ scaleX: song / songLength }}
+              animate={{ scaleX: song / track.duration }}
               transition={{ duration: 1, ease: 'linear' }}
             />
           </div>
-          <span>-{clock(songLength - song)}</span>
+          <span>-{clock(track.duration - song)}</span>
         </div>
         <div className="island-controls">
-          <IconButton label="Previous track" onClick={actions.skip}>
+          <IconButton label="Previous track" onClick={() => actions.skip(-1)}>
             <Rewind size={18} fill="currentColor" />
           </IconButton>
           <IconButton
@@ -1068,7 +1094,7 @@ function IslandContent({
               <Play size={22} fill="currentColor" />
             )}
           </IconButton>
-          <IconButton label="Next track" onClick={actions.skip}>
+          <IconButton label="Next track" onClick={() => actions.skip(1)}>
             <FastForward size={18} fill="currentColor" />
           </IconButton>
         </div>
@@ -1135,11 +1161,15 @@ function IslandContent({
   return (
     <div className="island-calendar">
       <span className="eyebrow">Up next · in 10 min</span>
-      <strong>Make something good.</strong>
+      <strong>Studio session</strong>
       <div>
-        <span className="calendar-attendee">A</span>
-        <span className="calendar-attendee">E</span>
-        <span>Design exploration · 30 min</span>
+        <span className="calendar-attendee" aria-label="Eric">
+          E
+        </span>
+        <span className="calendar-attendee" aria-label="Maya">
+          M
+        </span>
+        <span>Creative planning · 30 min</span>
       </div>
     </div>
   );
@@ -1152,6 +1182,8 @@ export function DynamicIsland() {
   const [callEnded, setCallEnded] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [song, setSong] = useState(84);
+  const [trackIndex, setTrackIndex] = useState(0);
+  const track = islandTracks[trackIndex];
   const [timer, setTimer] = useState(timerLength);
   const [timerRunning, setTimerRunning] = useState(true);
   useActiveInterval(
@@ -1161,7 +1193,7 @@ export function DynamicIsland() {
     false,
   );
   useActiveInterval(
-    () => setSong((n) => (n + 1) % songLength),
+    () => setSong((n) => (n + 1) % track.duration),
     1000,
     mode === 'Music' && playing,
     false,
@@ -1231,6 +1263,7 @@ export function DynamicIsland() {
                 callEnded={callEnded}
                 playing={playing}
                 song={song}
+                track={track}
                 timer={timer}
                 timerRunning={timerRunning}
                 actions={{
@@ -1239,7 +1272,14 @@ export function DynamicIsland() {
                     setSeconds(0);
                   },
                   togglePlay: () => setPlaying(!playing),
-                  skip: () => setSong(0),
+                  skip: (direction) => {
+                    setTrackIndex(
+                      (index) =>
+                        (index + direction + islandTracks.length) %
+                        islandTracks.length,
+                    );
+                    setSong(0);
+                  },
                   toggleTimer: () => setTimerRunning(!timerRunning),
                   cancelTimer: () => {
                     setTimer(timerLength);

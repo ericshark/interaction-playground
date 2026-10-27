@@ -13,14 +13,23 @@ const pressedIndex = (cards: Locator) =>
     ),
   );
 
-test.beforeEach(async ({ page }) => {
-  // Smooth scrolling can keep moving after Playwright positions a control.
-  // Disable scrolling motion for gesture tests; canvas animations remain enabled.
+test.beforeEach(async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  if (!testInfo.title.includes('navigation')) {
+    // Keep coordinate gestures stable without changing production motion behavior.
+    // Navigation tests exercise the real smooth-scrolling CSS.
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        const style = document.createElement('style');
+        style.textContent = 'html { scroll-behavior: auto !important; }';
+        document.head.append(style);
+      });
+    });
+  }
   await page.goto('/');
 });
 
-test('all 17 demos render with local assets and no page errors or horizontal overflow', async ({
+test('all 16 demos render with local assets and no page errors or horizontal overflow', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -29,7 +38,8 @@ test('all 17 demos render with local assets and no page errors or horizontal ove
     if (message.type() === 'error') errors.push(message.text());
   });
   await page.reload();
-  await expect(page.locator('[data-demo]')).toHaveCount(17);
+  await expect(page.locator('[data-demo]')).toHaveCount(16);
+  await expect(demo(page, 'chat-orb')).toHaveCount(0);
   await expect(demo(page, 'agent-cards')).toHaveCount(0);
   await expect(demo(page, 'transactions-pending')).toHaveCount(0);
   await expect(page.locator('body')).toHaveCSS(
@@ -90,7 +100,6 @@ test('collections show the curated order and continuous numbering', async ({
     'Notification Cards',
     'Info Reveal',
     'Dynamic Island',
-    'Chat Orb',
     'Interactive Location Selector',
     'Time Zones',
     'Toolbar',
@@ -100,14 +109,14 @@ test('collections show the curated order and continuous numbering', async ({
     'Matrix',
   ]);
   await expect(page.locator('.demo-index')).toHaveText(
-    Array.from({ length: 17 }, (_, i) => String(i + 1).padStart(2, '0')),
+    Array.from({ length: 16 }, (_, i) => String(i + 1).padStart(2, '0')),
   );
 });
 
 test('section navigation supports anchors, keyboard activation, and scroll tracking', async ({
   page,
 }) => {
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  await expect(page.locator('html')).toHaveCSS('scroll-behavior', 'smooth');
   const nav = page.getByRole('navigation', { name: 'Study sections' });
   const images = nav.getByRole('link', { name: /^Images/ });
   const widgets = nav.getByRole('link', { name: /^Widgets/ });
@@ -146,8 +155,7 @@ test('section navigation supports anchors, keyboard activation, and scroll track
 test('direct section links and reduced-motion navigation work in both themes', async ({
   page,
 }) => {
-  await page.getByRole('button', { name: 'Reduce motion' }).click();
-  await expect(page.locator('html')).toHaveCSS('scroll-behavior', 'auto');
+  await expect(page.locator('html')).toHaveCSS('scroll-behavior', 'smooth');
   await page.getByRole('button', { name: 'Night mode' }).click();
   await page.goto('/#experiments');
   const nav = page.getByRole('navigation', { name: 'Study sections' });
@@ -179,9 +187,7 @@ test('direct section links and reduced-motion navigation work in both themes', a
   await page.goto('/');
   await page.getByRole('button', { name: 'Night mode' }).click();
   await expect(nav).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-  await page.getByRole('button', { name: 'Reduce motion' }).click();
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await expect(page.locator('html')).toHaveCSS('scroll-behavior', 'auto');
+  await expect(page.locator('html')).toHaveCSS('scroll-behavior', 'smooth');
 });
 
 test('header preferences toggle and persist across reloads', async ({
@@ -189,30 +195,25 @@ test('header preferences toggle and persist across reloads', async ({
 }) => {
   const night = page.getByRole('button', { name: 'Night mode' });
   const sound = page.getByRole('button', { name: 'Sound effects' });
-  const motion = page.getByRole('button', { name: 'Reduce motion' });
-  const spotlight = page.getByRole('button', { name: 'Cursor spotlight' });
+  await expect(page.getByRole('button', { name: 'Reduce motion' })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole('button', { name: 'Cursor spotlight' }),
+  ).toHaveCount(0);
   await expect(night).toHaveAttribute('aria-pressed', 'false');
   await expect(sound).toHaveAttribute('aria-pressed', 'true');
-  await expect(motion).toHaveAttribute('aria-pressed', 'false');
-  await expect(spotlight).toHaveAttribute('aria-pressed', 'false');
   await night.click();
   await sound.click();
-  await motion.click();
-  await spotlight.click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
-  await expect(page.locator('.spotlight')).toBeAttached();
   await page.reload();
   await expect(night).toHaveAttribute('aria-pressed', 'true');
   await expect(sound).toHaveAttribute('aria-pressed', 'false');
-  await expect(motion).toHaveAttribute('aria-pressed', 'true');
-  await expect(spotlight).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('html')).toHaveCSS(
     'background-color',
     'rgb(10, 10, 11)',
   );
-  await spotlight.click();
   await expect(page.locator('.spotlight')).toHaveCount(0);
 });
 test('animations keep running when the OS asks for reduced motion', async ({
@@ -229,18 +230,22 @@ test('animations keep running when the OS asks for reduced motion', async ({
     .not.toEqual(initial);
 });
 
-test('the Reduce motion toggle freezes loops while manual canvas controls still redraw', async ({
+test('legacy Still and Spotlight preferences do not disable motion or add an overlay', async ({
   page,
 }) => {
-  await page.getByRole('button', { name: 'Reduce motion' }).click();
+  await page.addInitScript(() => {
+    localStorage.setItem('playground:reduce-motion', 'true');
+    localStorage.setItem('playground:spotlight', 'true');
+  });
+  await page.reload();
+  await expect(page.locator('.spotlight')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Reduce motion' })).toHaveCount(
+    0,
+  );
   const section = demo(page, 'ascii-logos');
   await section.scrollIntoViewIfNeeded();
-  await expect(section).toHaveAttribute('data-active', 'true');
   const initial = await canvasData(page, 'ascii-logos');
-  await page.waitForTimeout(200);
-  expect(await canvasData(page, 'ascii-logos')).toEqual(initial);
-  await section.getByRole('button', { name: 'Next logo' }).click();
-  expect(await canvasData(page, 'ascii-logos')).not.toEqual(initial);
+  await expect.poll(() => canvasData(page, 'ascii-logos')).not.toEqual(initial);
 });
 
 test('ASCII logo navigation changes the drawing and wraps in both directions', async ({
@@ -437,26 +442,43 @@ test('hold-to-delete cancels early, completes a sustained hold, and resets', asy
   await page.keyboard.up('Space');
   await expect(track).toBeVisible();
   await track.hover();
+  await section.evaluate((element) => {
+    const timing = { start: 0, elapsed: 0 };
+    (window as Window & { holdTiming?: typeof timing }).holdTiming = timing;
+    element.addEventListener(
+      'pointerdown',
+      () => {
+        timing.start = performance.now();
+      },
+      { once: true },
+    );
+    const observer = new MutationObserver(() => {
+      if (
+        element.querySelector('[role="status"]')?.textContent === 'Saku removed'
+      ) {
+        timing.elapsed = performance.now() - timing.start;
+        observer.disconnect();
+      }
+    });
+    observer.observe(element, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+  });
   await page.mouse.down();
   await expect(track).toHaveCount(0, { timeout: 3000 });
   await page.mouse.up();
   await expect(section.getByRole('status')).toHaveText('Saku removed');
+  const elapsed = await page.evaluate(
+    () =>
+      (window as Window & { holdTiming?: { elapsed: number } }).holdTiming!
+        .elapsed,
+  );
+  expect(elapsed).toBeGreaterThanOrEqual(700);
+  expect(elapsed).toBeLessThan(1050);
   await section.getByRole('button', { name: 'Reset playlist' }).click();
   await expect(section.locator('.track')).toHaveCount(3);
-});
-
-test('voice orb switches provider and listening state', async ({ page }) => {
-  const section = demo(page, 'chat-orb');
-  const claude = section
-    .getByRole('group', { name: 'Voice provider' })
-    .getByRole('button', { name: 'Claude' });
-  await claude.click();
-  await expect(claude).toHaveAttribute('aria-pressed', 'true');
-  await section.getByRole('button', { name: 'Start voice preview' }).click();
-  await expect(
-    section.getByRole('button', { name: 'Stop listening' }),
-  ).toHaveAttribute('aria-pressed', 'true');
-  await expect(section.getByRole('status')).toContainText('Listening');
 });
 
 test('artwork transitions through list, card, and pack layouts', async ({
@@ -581,6 +603,7 @@ test('world clock tiles swap when one is dropped on another', async ({
   const section = demo(page, 'time-zones');
   await section.scrollIntoViewIfNeeded();
   await section.locator('.clock-tile').last().hover();
+  await expect(section.locator('.stage')).toHaveCSS('transform', 'none');
   const handle = await section
     .getByRole('button', { name: 'Drag San Francisco clock' })
     .boundingBox();
@@ -608,12 +631,13 @@ test('Dynamic Island morphs between its modes and collapses', async ({
 }) => {
   const section = demo(page, 'dynamic-island');
   await section.getByRole('button', { name: 'Music', exact: true }).click();
-  await expect(section.getByText('Saku', { exact: true })).toBeVisible();
+  await expect(section.getByText('After Hours', { exact: true })).toBeVisible();
   await section.getByRole('button', { name: 'Pause music preview' }).click();
   await expect(
     section.getByRole('button', { name: 'Play music preview' }),
   ).toBeVisible();
   await section.getByRole('button', { name: 'Call', exact: true }).click();
+  await expect(section.getByText('Eric', { exact: true })).toBeVisible();
   await expect(section.getByText('00:01')).toBeVisible();
   await section.getByRole('button', { name: 'End call' }).click();
   await expect(section.getByText('Call ended')).toBeVisible();
@@ -624,7 +648,7 @@ test('Dynamic Island morphs between its modes and collapses', async ({
   await section.getByRole('button', { name: 'Timer', exact: true }).click();
   await expect(section.getByText(/^0[45]:\d\d$/)).toBeVisible();
   await section.getByRole('button', { name: 'Calendar', exact: true }).click();
-  await expect(section.getByText('Make something good.')).toBeVisible();
+  await expect(section.getByText('Studio session')).toBeVisible();
   await section.getByRole('button', { name: 'Idle', exact: true }).click();
   await expect(
     section.getByRole('button', { name: 'Dynamic Island' }),
@@ -669,4 +693,99 @@ test('rotating grid geometry and glyph controls change its output', async ({
     'aria-label',
     'Rotating grid of ☆ symbols, 20 rows and 24 columns',
   );
+});
+
+test('each stacked card reveals its label on focus and selection', async ({
+  page,
+  isMobile,
+}) => {
+  const section = demo(page, 'stacked-cards');
+  for (const name of [
+    'Connections',
+    'Messages',
+    'Terminal',
+    'Browser',
+    'Notes',
+  ]) {
+    const card = section.getByRole('button', { name: `Show ${name} card` });
+    await card.focus();
+    await expect(card.locator('.spatial-label')).toHaveCSS('opacity', '1');
+    if (!((await card.getAttribute('aria-pressed')) === 'true'))
+      await card.press('Enter');
+    await expect(card).toHaveAttribute('aria-pressed', 'true');
+    await card.blur();
+    await expect(card.locator('.spatial-label')).toHaveCSS('opacity', '1');
+    if (!isMobile) {
+      const other = section.getByRole('button', {
+        name: `Show ${name === 'Notes' ? 'Browser' : 'Notes'} card`,
+      });
+      await other.focus();
+      await other.press('Enter');
+      // Find an exposed point on the skewed card as its spring motion settles.
+      await expect
+        .poll(async () => {
+          const point = await card.evaluate((element) => {
+            const box = element.getBoundingClientRect();
+            for (
+              let y = Math.max(60, box.top + 8);
+              y < Math.min(innerHeight, box.bottom - 8);
+              y += 8
+            ) {
+              for (
+                let x = Math.max(0, box.left + 8);
+                x < Math.min(innerWidth, box.right - 8);
+                x += 8
+              ) {
+                if (
+                  document.elementFromPoint(x, y)?.closest('.spatial-card') ===
+                  element
+                )
+                  return { x, y };
+              }
+            }
+            return null;
+          });
+          if (point) await page.mouse.move(point.x, point.y);
+          return card
+            .locator('.spatial-label')
+            .evaluate((element) => getComputedStyle(element).opacity);
+        })
+        .toBe('1');
+    }
+  }
+});
+
+test('Dynamic Island playlist changes tracks, wraps, and preserves compact content', async ({
+  page,
+}) => {
+  const section = demo(page, 'dynamic-island');
+  await section.getByRole('button', { name: 'Music', exact: true }).click();
+  await section.getByRole('button', { name: 'Pause music preview' }).click();
+  for (const [title, artist, remaining] of [
+    ['Coast to Coast', 'Daylight Club', '-03:58'],
+    ['First Light', 'Quiet Current', '-03:16'],
+    ['After Hours', 'Northline', '-03:34'],
+  ]) {
+    await section.getByRole('button', { name: 'Next track' }).click();
+    await expect(section.getByText(title, { exact: true })).toBeVisible();
+    await expect(section.getByText(artist, { exact: true })).toBeVisible();
+    await expect(section.locator('.island-progress')).toContainText('00:00');
+    await expect(section.locator('.island-progress')).toContainText(remaining);
+  }
+  await section.getByRole('button', { name: 'Previous track' }).click();
+  await expect(section.getByText('First Light', { exact: true })).toBeVisible();
+  const artwork = await section
+    .getByRole('img', { name: 'First Light album artwork' })
+    .getAttribute('src');
+  await section
+    .getByRole('button', { name: 'Collapse Music activity' })
+    .click();
+  await expect(
+    section.getByRole('img', { name: 'First Light by Quiet Current' }),
+  ).toHaveAttribute('src', artwork!);
+  await section.getByRole('button', { name: 'Expand Music activity' }).click();
+  await expect(section.getByText('First Light', { exact: true })).toBeVisible();
+  await expect(
+    section.getByRole('button', { name: 'Play music preview' }),
+  ).toBeVisible();
 });
