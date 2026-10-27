@@ -219,9 +219,20 @@ main {
 .header-toggle:active {
   transform: scale(0.96);
 }
-.header-toggle[aria-label='Sound effects'][aria-pressed='true'] svg,
 .header-toggle[aria-label='Night mode'][aria-pressed='true'] svg {
   color: #6f7cf2;
+}
+.header-toggle.icon-only {
+  width: 30px;
+  padding: 0;
+  justify-content: center;
+}
+.header-toggle[aria-label='Sound effects'][aria-pressed='false'] {
+  color: #d64550;
+}
+:root[data-theme='dark']
+  .header-toggle[aria-label='Sound effects'][aria-pressed='false'] {
+  color: #ff7882;
 }
 html {
   scroll-behavior: smooth;

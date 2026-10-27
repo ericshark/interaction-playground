@@ -181,19 +181,19 @@ function HeaderToggle({
   pressed: boolean;
   onToggle: () => void;
   icon: ReactNode;
-  text: string;
+  text?: string;
 }) {
   return (
     <button
       type="button"
-      className="header-toggle"
+      className={`header-toggle${text ? '' : ' icon-only'}`}
       aria-label={label}
       aria-pressed={pressed}
       title={title}
       onClick={onToggle}
     >
       {icon}
-      <span>{text}</span>
+      {text && <span>{text}</span>}
     </button>
   );
 }
@@ -216,7 +216,6 @@ function HeaderControls() {
         pressed={sound}
         onToggle={() => setSound(!sound)}
         icon={sound ? <Volume2 size={14} /> : <VolumeX size={14} />}
-        text={sound ? 'Sound' : 'Muted'}
       />
     </div>
   );
