@@ -118,11 +118,13 @@ const ActivityContext = createContext({ active: false, reduced: false });
 export function Demo({
   title,
   index,
+  hint,
   children,
   className = '',
 }: {
   title: string;
   index: number;
+  hint: string;
   children: ReactNode;
   className?: string;
 }) {
@@ -139,10 +141,17 @@ export function Demo({
         data-active={active}
         data-demo={id}
       >
-        <span className="demo-index mono" aria-hidden="true">
-          {String(index).padStart(2, '0')}
-        </span>
-        <h2 id={id}>{title}</h2>
+        <header className="demo-header">
+          <div className="demo-heading">
+            <span className="demo-index mono" aria-hidden="true">
+              {String(index).padStart(2, '0')}
+            </span>
+            <h3 id={id} className="demo-title">
+              {title}
+            </h3>
+          </div>
+          <p className="study-hint">{hint}</p>
+        </header>
         <motion.div
           className="stage"
           initial={reduced ? false : { opacity: 0, y: 28 }}

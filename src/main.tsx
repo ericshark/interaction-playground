@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, type ReactNode } from 'react';
+import React, { useEffect, useRef, useState, type ReactNode } from 'react';
 import ReactDOM from 'react-dom/client';
 import {
   AnimatePresence,
@@ -40,25 +40,153 @@ import {
 import { TimeZones, SwitchLayout } from './demos/controls';
 import './styles.css';
 
-const demos = [
-  ['Matrix', Matrix],
-  ['3D Gallery Carousel', GalleryCarousel],
-  ['Stacked cards', StackedCards],
-  ['Dynamic island', DynamicIsland],
-  ['Chat Orb', ChatOrb],
-  ['Notification Cards', Notifications],
-  ['Rotating Objects in a Grid', RotatingGrid],
-  ['Image Send', ImageSend],
-  ['Infinite cards', InfiniteCards],
-  ['Interactive Location Selector', LocationSelector],
-  ['ASCII Logos', AsciiLogos],
-  ['Switch Layout', SwitchLayout],
-  ['Time Zones', TimeZones],
-  ['Hold to Delete', HoldToDelete],
-  ['Image Gallery', ImageGallery],
-  ['Info Reveal', InfoReveal],
-  ['Toolbar', Toolbar],
+const groups = [
+  {
+    id: 'images',
+    label: 'Images',
+    title: 'Images & galleries',
+    description: 'Ways to browse, arrange, and share images.',
+    studies: [
+      [
+        '3D Gallery Carousel',
+        GalleryCarousel,
+        'Watch it turn, or use the arrows to browse.',
+      ],
+      [
+        'Infinite Cards',
+        InfiniteCards,
+        'Scroll over the stack or use the arrows to browse.',
+      ],
+      [
+        'Image Gallery',
+        ImageGallery,
+        'Select a photograph to take a closer look.',
+      ],
+      [
+        'Image Send',
+        ImageSend,
+        'Pick a few photographs and send them on their way.',
+      ],
+      ['Switch Layout', SwitchLayout, 'Try the list, card, and pack views.'],
+    ],
+  },
+  {
+    id: 'widgets',
+    label: 'Widgets',
+    title: 'Cards & widgets',
+    description:
+      'Small interfaces for information, activity, and everyday tools.',
+    studies: [
+      [
+        'Stacked Cards',
+        StackedCards,
+        'Select a card to bring it to the front.',
+      ],
+      [
+        'Notification Cards',
+        Notifications,
+        'Inspect a notification or replay the stack.',
+      ],
+      ['Info Reveal', InfoReveal, 'Select a sheet to explore each stage.'],
+      [
+        'Dynamic Island',
+        DynamicIsland,
+        'Switch activities and expand the island.',
+      ],
+      ['Chat Orb', ChatOrb, 'Choose a voice provider and start a preview.'],
+      [
+        'Interactive Location Selector',
+        LocationSelector,
+        'Choose a region to explore the map.',
+      ],
+      [
+        'Time Zones',
+        TimeZones,
+        'Add cities, rearrange clocks, and change the time format.',
+      ],
+    ],
+  },
+  {
+    id: 'experiments',
+    label: 'Experiments',
+    title: 'Controls & experiments',
+    description: 'Focused actions and playful studies in motion.',
+    studies: [
+      ['Toolbar', Toolbar, 'Choose a mode, then open its summary for more.'],
+      ['Hold to Delete', HoldToDelete, 'Press and hold a track to remove it.'],
+      ['ASCII Logos', AsciiLogos, 'Use the arrows to explore the collection.'],
+      [
+        'Rotating Objects in a Grid',
+        RotatingGrid,
+        'Change the grid and symbols to shape the pattern.',
+      ],
+      ['Matrix', Matrix, 'Click to glitch; use Space to pause and resume.'],
+    ],
+  },
 ] as const;
+
+const studyCount = groups.reduce(
+  (total, group) => total + group.studies.length,
+  0,
+);
+
+function SectionNavigation() {
+  const [active, setActive] = useState<string>(groups[0].id);
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const sections = groups.map((group) => document.getElementById(group.id)!);
+    const end = document.getElementById('gallery-end')!;
+    let observer: IntersectionObserver;
+    const update = () => {
+      const boundary = (ref.current?.getBoundingClientRect().height ?? 56) + 2;
+      const current = sections
+        .filter((section) => section.getBoundingClientRect().top <= boundary)
+        .slice(-1)[0];
+      const atBottom =
+        window.scrollY + window.innerHeight >=
+        document.documentElement.scrollHeight - 2;
+      setActive(
+        atBottom ? groups[groups.length - 1].id : (current?.id ?? groups[0].id),
+      );
+    };
+    const observe = () => {
+      observer?.disconnect();
+      const boundary = (ref.current?.getBoundingClientRect().height ?? 56) + 2;
+      // A thin observation strip tracks section crossings beneath the sticky bar,
+      // even when a group is much taller than the viewport.
+      observer = new IntersectionObserver(update, {
+        rootMargin: `-${boundary}px 0px -${Math.max(0, window.innerHeight - boundary - 1)}px 0px`,
+      });
+      sections.forEach((section) => observer.observe(section));
+      update();
+    };
+    const endObserver = new IntersectionObserver(update, { threshold: [0, 1] });
+    endObserver.observe(end);
+    observe();
+    window.addEventListener('resize', observe);
+    return () => {
+      observer.disconnect();
+      endObserver.disconnect();
+      window.removeEventListener('resize', observe);
+    };
+  }, []);
+  return (
+    <nav ref={ref} className="section-nav" aria-label="Study sections">
+      {groups.map((group) => (
+        <a
+          key={group.id}
+          href={`#${group.id}`}
+          aria-current={active === group.id ? 'location' : undefined}
+        >
+          {group.label}
+          <span className="mono">
+            {String(group.studies.length).padStart(2, '0')}
+          </span>
+        </a>
+      ))}
+    </nav>
+  );
+}
 
 function HeaderToggle({
   label,
@@ -194,15 +322,46 @@ function App() {
           <div className="page-title">
             <h1>Interface Explorations</h1>
             <span className="mono">
-              {String(demos.length).padStart(2, '0')} studies in motion
+              {String(studyCount).padStart(2, '0')} studies in motion
             </span>
           </div>
           <HeaderControls />
         </motion.header>
-        {demos.map(([title, Component], i) => (
-          <Demo key={title} title={title} index={i + 1}>
-            <Component />
-          </Demo>
+        <SectionNavigation />
+        {groups.map((group, groupIndex) => (
+          <section
+            key={group.id}
+            id={group.id}
+            className="study-group"
+            aria-labelledby={`${group.id}-title`}
+          >
+            <header className="group-header">
+              <span className="group-kicker mono">
+                Collection {String(groupIndex + 1).padStart(2, '0')}
+              </span>
+              <h2 id={`${group.id}-title`}>{group.title}</h2>
+              <p>{group.description}</p>
+            </header>
+            {group.studies.map(([title, Component, hint], studyIndex) => (
+              <Demo
+                key={title}
+                title={title}
+                hint={hint}
+                index={
+                  groups
+                    .slice(0, groupIndex)
+                    .reduce(
+                      (total, previous) => total + previous.studies.length,
+                      0,
+                    ) +
+                  studyIndex +
+                  1
+                }
+              >
+                <Component />
+              </Demo>
+            ))}
+          </section>
         ))}
         <footer>
           Interface studies, in motion.
@@ -210,6 +369,7 @@ function App() {
             Inspired by Abil Shrestha ↗
           </a>
         </footer>
+        <div id="gallery-end" aria-hidden="true" />
       </main>
     </PreferencesProvider>
   );

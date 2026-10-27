@@ -14,6 +14,9 @@ const pressedIndex = (cards: Locator) =>
   );
 
 test.beforeEach(async ({ page }) => {
+  // Smooth scrolling can keep moving after Playwright positions a control.
+  // Disable scrolling motion for gesture tests; canvas animations remain enabled.
+  await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/');
 });
 
@@ -39,7 +42,7 @@ test('all 17 demos render with local assets and no page errors or horizontal ove
   );
   for (const section of await page.locator('[data-demo]').all()) {
     await section.scrollIntoViewIfNeeded();
-    await expect(section.getByRole('heading', { level: 2 })).toBeVisible();
+    await expect(section.getByRole('heading', { level: 3 })).toBeVisible();
     await expect
       .poll(() =>
         section
@@ -67,6 +70,118 @@ test('all 17 demos render with local assets and no page errors or horizontal ove
       .map((entry) => entry.name),
   );
   expect(external).toEqual([]);
+});
+
+test('collections show the curated order and continuous numbering', async ({
+  page,
+}) => {
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText([
+    'Images & galleries',
+    'Cards & widgets',
+    'Controls & experiments',
+  ]);
+  await expect(page.locator('.demo-title')).toHaveText([
+    '3D Gallery Carousel',
+    'Infinite Cards',
+    'Image Gallery',
+    'Image Send',
+    'Switch Layout',
+    'Stacked Cards',
+    'Notification Cards',
+    'Info Reveal',
+    'Dynamic Island',
+    'Chat Orb',
+    'Interactive Location Selector',
+    'Time Zones',
+    'Toolbar',
+    'Hold to Delete',
+    'ASCII Logos',
+    'Rotating Objects in a Grid',
+    'Matrix',
+  ]);
+  await expect(page.locator('.demo-index')).toHaveText(
+    Array.from({ length: 17 }, (_, i) => String(i + 1).padStart(2, '0')),
+  );
+});
+
+test('section navigation supports anchors, keyboard activation, and scroll tracking', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const nav = page.getByRole('navigation', { name: 'Study sections' });
+  const images = nav.getByRole('link', { name: /^Images/ });
+  const widgets = nav.getByRole('link', { name: /^Widgets/ });
+  const experiments = nav.getByRole('link', { name: /^Experiments/ });
+  await expect(images).toHaveAttribute('aria-current', 'location');
+  await widgets.click();
+  await expect(page).toHaveURL(/#widgets$/);
+  await expect(widgets).toHaveAttribute('aria-current', 'location');
+  await expect
+    .poll(() => nav.evaluate((element) => element.getBoundingClientRect().top))
+    .toBe(0);
+  await expect
+    .poll(() =>
+      page
+        .locator('#widgets')
+        .evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeCloseTo(56, 0);
+  await experiments.focus();
+  await experiments.press('Enter');
+  await expect(page).toHaveURL(/#experiments$/);
+  await expect(experiments).toHaveAttribute('aria-current', 'location');
+  await demo(page, 'stacked-cards').scrollIntoViewIfNeeded();
+  await expect(widgets).toHaveAttribute('aria-current', 'location');
+  await page.evaluate(() =>
+    window.scrollTo({
+      top: document.documentElement.scrollHeight,
+      behavior: 'instant',
+    }),
+  );
+  await expect(experiments).toHaveAttribute('aria-current', 'location');
+  await images.click();
+  await expect(images).toHaveAttribute('aria-current', 'location');
+});
+
+test('direct section links and reduced-motion navigation work in both themes', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Reduce motion' }).click();
+  await expect(page.locator('html')).toHaveCSS('scroll-behavior', 'auto');
+  await page.getByRole('button', { name: 'Night mode' }).click();
+  await page.goto('/#experiments');
+  const nav = page.getByRole('navigation', { name: 'Study sections' });
+  await expect(nav.getByRole('link', { name: /^Experiments/ })).toHaveAttribute(
+    'aria-current',
+    'location',
+  );
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect
+    .poll(() =>
+      page
+        .locator('#experiments')
+        .evaluate((element) => element.getBoundingClientRect().top),
+    )
+    .toBeCloseTo(56, 0);
+  await expect(nav).toHaveCSS('background-color', 'rgb(10, 10, 11)');
+  const toolbar = demo(page, 'toolbar');
+  await toolbar.getByRole('button', { name: /f4a9c7b/ }).click();
+  await expect(toolbar.getByText('One small fix away.')).toBeVisible();
+  await expect
+    .poll(async () => {
+      const buttons = await toolbar
+        .getByRole('group', { name: 'Toolbar mode' })
+        .boundingBox();
+      const popup = await toolbar.locator('.toolbar-surface').boundingBox();
+      return buttons && popup ? popup.y - buttons.y - buttons.height : -1;
+    })
+    .toBeGreaterThanOrEqual(14);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Night mode' }).click();
+  await expect(nav).toHaveCSS('background-color', 'rgb(255, 255, 255)');
+  await page.getByRole('button', { name: 'Reduce motion' }).click();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await expect(page.locator('html')).toHaveCSS('scroll-behavior', 'auto');
 });
 
 test('header preferences toggle and persist across reloads', async ({
@@ -533,7 +648,7 @@ test('Matrix pauses from the keyboard, glitches on click, and stops outside the 
   await canvas.click();
   await expect(canvas).toHaveAttribute('aria-pressed', 'false');
   await expect.poll(() => canvasData(page, 'matrix')).not.toEqual(paused);
-  await demo(page, 'toolbar').scrollIntoViewIfNeeded();
+  await demo(page, '3d-gallery-carousel').scrollIntoViewIfNeeded();
   await expect(section).toHaveAttribute('data-active', 'false');
   const inactive = await canvasData(page, 'matrix');
   await page.waitForTimeout(200);
