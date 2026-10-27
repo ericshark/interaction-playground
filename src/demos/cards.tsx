@@ -28,6 +28,12 @@ export function Toolbar() {
   };
   return (
     <div className="toolbar-demo">
+      <Choices
+        options={['Commit', 'Analytics', 'Upgrade']}
+        value={tab}
+        onChange={change}
+        label="Toolbar mode"
+      />
       <motion.div
         layout
         className={`toolbar-surface ${expanded ? 'expanded' : ''}`}
@@ -134,12 +140,6 @@ export function Toolbar() {
           )}
         </AnimatePresence>
       </motion.div>
-      <Choices
-        options={['Commit', 'Analytics', 'Upgrade']}
-        value={tab}
-        onChange={change}
-        label="Toolbar mode"
-      />
     </div>
   );
 }

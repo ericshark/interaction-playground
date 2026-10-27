@@ -17,7 +17,7 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/');
 });
 
-test('all 19 demos render with local assets and no page errors or horizontal overflow', async ({
+test('all 17 demos render with local assets and no page errors or horizontal overflow', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -26,7 +26,9 @@ test('all 19 demos render with local assets and no page errors or horizontal ove
     if (message.type() === 'error') errors.push(message.text());
   });
   await page.reload();
-  await expect(page.locator('[data-demo]')).toHaveCount(19);
+  await expect(page.locator('[data-demo]')).toHaveCount(17);
+  await expect(demo(page, 'agent-cards')).toHaveCount(0);
+  await expect(demo(page, 'transactions-pending')).toHaveCount(0);
   await expect(page.locator('body')).toHaveCSS(
     'background-color',
     'rgba(0, 0, 0, 0)',
@@ -280,18 +282,6 @@ test('hovering a notification lifts it and clicking brings it forward', async ({
   await expect(card).toHaveAttribute('aria-pressed', 'true');
 });
 
-test('agent cards select and replay', async ({ page }) => {
-  const section = demo(page, 'agent-cards');
-  await section.getByRole('button', { name: 'Select Sage, Oracle' }).click();
-  await expect(
-    section.getByText('Sage is ready. What are we making?'),
-  ).toBeVisible();
-  await section.getByRole('button', { name: 'Replay animation' }).click();
-  await expect(
-    section.getByRole('button', { name: 'Select Sage, Oracle' }),
-  ).toHaveAttribute('aria-pressed', 'false');
-});
-
 test('information sheets reveal the selected stage', async ({ page }) => {
   const section = demo(page, 'info-reveal');
   const publishing = section.getByRole('button', {
@@ -426,23 +416,6 @@ test('selected photographs send and can be sent again', async ({ page }) => {
     section.getByRole('button', { name: 'Open image picker' }),
   ).toBeVisible();
 });
-test('transaction queue expands, pauses, finishes, and replays', async ({
-  page,
-}) => {
-  const section = demo(page, 'transactions-pending');
-  await section.getByRole('button', { name: 'Process queue' }).click();
-  await expect(section.locator('.transaction-card')).toHaveCount(3);
-  await section.getByRole('button', { name: 'Pause processing' }).click();
-  await page.waitForTimeout(1900);
-  await expect(section.locator('.transaction-card')).toHaveCount(3);
-  await section.getByRole('button', { name: 'Process queue' }).click();
-  await expect(section.getByText('All caught up.')).toBeVisible({
-    timeout: 7500,
-  });
-  await section.getByRole('button', { name: 'Replay transactions' }).click();
-  await expect(section.locator('.transaction-card')).toHaveCount(4);
-});
-
 test('floral gallery expands a photograph and dismisses with Escape', async ({
   page,
 }) => {

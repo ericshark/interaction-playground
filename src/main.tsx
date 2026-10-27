@@ -28,7 +28,6 @@ import {
 import {
   Toolbar,
   Notifications,
-  Agents,
   InfoReveal,
   HoldToDelete,
 } from './demos/cards';
@@ -36,7 +35,6 @@ import {
   ChatOrb,
   LocationSelector,
   ImageSend,
-  Transactions,
   DynamicIsland,
 } from './demos/widgets';
 import { TimeZones, SwitchLayout } from './demos/controls';
@@ -57,10 +55,8 @@ const demos = [
   ['Switch Layout', SwitchLayout],
   ['Time Zones', TimeZones],
   ['Hold to Delete', HoldToDelete],
-  ['Agent Cards', Agents],
   ['Image Gallery', ImageGallery],
   ['Info Reveal', InfoReveal],
-  ['Transactions Pending', Transactions],
   ['Toolbar', Toolbar],
 ] as const;
 
