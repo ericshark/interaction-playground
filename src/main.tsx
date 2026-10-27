@@ -278,12 +278,6 @@ function App() {
             ))}
           </section>
         ))}
-        <footer>
-          Interface studies, in motion.
-          <a href="https://www.abilshr.com/" target="_blank" rel="noreferrer">
-            Inspired by Abil Shrestha ↗
-          </a>
-        </footer>
         <div id="gallery-end" aria-hidden="true" />
       </main>
     </PreferencesProvider>
