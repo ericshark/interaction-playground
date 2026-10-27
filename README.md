@@ -1,8 +1,8 @@
 # Interface Explorations
 
-A React, TypeScript, and Motion playground with nineteen interactive UI demos,
-inspired by [Abil Shrestha's website](https://www.abilshr.com/). Includes animated
-cards, galleries, controls, and graphics with light and dark themes.
+A React, TypeScript, and Motion playground with sixteen interactive UI studies.
+Explore animated cards, galleries, controls, and graphics across three collections
+with light and dark themes.
 
 ## Run locally
 
@@ -31,10 +31,9 @@ moves to the next free port if it is occupied.
 - `src/styles.css`: themes and responsive styles; `src/sound.ts`: synthesized sounds.
 - `public/`: local fonts, images, and asset provenance.
 
-Transactions, calls, music, and other services are visual simulations. The
-voice orb doesn't record audio; music previews are silent. Demo state resets
-on reload; header preferences are remembered.
+Calls, music, and other services are visual simulations; music previews are silent.
+Demo state resets on reload; theme and sound preferences are remembered.
 
 See [implementation notes](docs/implementation.md) for animation behavior,
-browser checks, and asset sources. The original design, fonts, and photographs
-retain their creators' rights; no additional redistribution rights are granted.
+browser checks, and asset sources. Fonts and photographs retain their creators'
+rights; no additional redistribution rights are granted.

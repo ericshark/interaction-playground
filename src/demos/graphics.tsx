@@ -223,7 +223,7 @@ export function AsciiLogos() {
   );
 }
 
-const rainGlyphs = 'ABILX<>=+*-';
+const rainGlyphs = 'CODE<>=+*-';
 const codeSnippets = [
   'if is_admin or is_moderator:',
   'quicksort (x:xs) = quicksort [a | a <- xs, a < x]',
